@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .custom_views import CustomRegisterView
+from .custom_views import CustomRegisterView, RegisterAdminView
 from .views import (
     HabitViewSet,
     CategoryViewSet,
@@ -31,4 +31,6 @@ urlpatterns = [
     # Custom registration endpoint
     path("api/auth/registration/", CustomRegisterView.as_view(), name="rest_register"),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
+    # Admin registration endpoint (initial setup)
+    path("api/auth/register-admin/", RegisterAdminView.as_view(), name="register-admin"),
 ]

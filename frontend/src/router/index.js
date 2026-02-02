@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
+import RegisterAdminView from '@/views/RegisterAdminView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import AdminSettings from '@/views/AdminSettings.vue'
 import ProfileView from '@/views/ProfileView.vue'
@@ -23,6 +24,12 @@ const router = createRouter({
       path: '/register',
       name: 'register',
       component: RegisterView,
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/register-admin',
+      name: 'register-admin',
+      component: RegisterAdminView,
       meta: { requiresAuth: false }
     },
     {
