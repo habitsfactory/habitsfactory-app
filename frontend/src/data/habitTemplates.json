@@ -1,0 +1,397 @@
+{
+  "categories": [
+    {
+      "id": "health",
+      "name": "Health",
+      "nameKey": "templateCategoryHealth",
+      "icon": "heart-pulse",
+      "color": "#22c55e",
+      "habits": [
+        {
+          "name": "Morning Run",
+          "nameKey": "templateMorningRun",
+          "icon": "footprints",
+          "color": "#22c55e",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Water Intake",
+          "nameKey": "templateWaterIntake",
+          "icon": "droplet",
+          "color": "#3b82f6",
+          "habit_type": "counter",
+          "unit": "glasses"
+        },
+        {
+          "name": "Sleep Hours",
+          "nameKey": "templateSleepHours",
+          "icon": "moon",
+          "color": "#6366f1",
+          "habit_type": "value",
+          "unit": "hours"
+        },
+        {
+          "name": "Meditation",
+          "nameKey": "templateMeditation",
+          "icon": "brain",
+          "color": "#ec4899",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Steps",
+          "nameKey": "templateSteps",
+          "icon": "activity",
+          "color": "#14b8a6",
+          "habit_type": "counter",
+          "unit": "steps"
+        },
+        {
+          "name": "Vitamins",
+          "nameKey": "templateVitamins",
+          "icon": "pill",
+          "color": "#f97316",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Healthy Meals",
+          "nameKey": "templateHealthyMeals",
+          "icon": "salad",
+          "color": "#84cc16",
+          "habit_type": "counter",
+          "unit": "meals"
+        },
+        {
+          "name": "No Alcohol",
+          "nameKey": "templateNoAlcohol",
+          "icon": "wine-off",
+          "color": "#dc2626",
+          "habit_type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "fitness",
+      "name": "Fitness",
+      "nameKey": "templateCategoryFitness",
+      "icon": "dumbbell",
+      "color": "#f97316",
+      "habits": [
+        {
+          "name": "Gym Workout",
+          "nameKey": "templateGymWorkout",
+          "icon": "dumbbell",
+          "color": "#f97316",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Yoga",
+          "nameKey": "templateYoga",
+          "icon": "heart",
+          "color": "#ef4444",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Push-ups",
+          "nameKey": "templatePushups",
+          "icon": "arrow-up-from-line",
+          "color": "#0ea5e9",
+          "habit_type": "counter",
+          "unit": "reps"
+        },
+        {
+          "name": "Stretching",
+          "nameKey": "templateStretching",
+          "icon": "stretch-horizontal",
+          "color": "#a855f7",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Swimming",
+          "nameKey": "templateSwimming",
+          "icon": "waves",
+          "color": "#06b6d4",
+          "habit_type": "value",
+          "unit": "min"
+        },
+        {
+          "name": "Cycling",
+          "nameKey": "templateCycling",
+          "icon": "bike",
+          "color": "#65a30d",
+          "habit_type": "value",
+          "unit": "km"
+        }
+      ]
+    },
+    {
+      "id": "productivity",
+      "name": "Productivity",
+      "nameKey": "templateCategoryProductivity",
+      "icon": "target",
+      "color": "#8b5cf6",
+      "habits": [
+        {
+          "name": "Focus Time",
+          "nameKey": "templateFocusTime",
+          "icon": "target",
+          "color": "#f97316",
+          "habit_type": "value",
+          "unit": "min"
+        },
+        {
+          "name": "Reading",
+          "nameKey": "templateReading",
+          "icon": "book-open",
+          "color": "#8b5cf6",
+          "habit_type": "value",
+          "unit": "pages"
+        },
+        {
+          "name": "Journaling",
+          "nameKey": "templateJournaling",
+          "icon": "pencil",
+          "color": "#a855f7",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "No Social Media",
+          "nameKey": "templateNoSocialMedia",
+          "icon": "smartphone-off",
+          "color": "#dc2626",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Learning",
+          "nameKey": "templateLearning",
+          "icon": "graduation-cap",
+          "color": "#0ea5e9",
+          "habit_type": "value",
+          "unit": "min"
+        },
+        {
+          "name": "Planning",
+          "nameKey": "templatePlanning",
+          "icon": "calendar-check",
+          "color": "#14b8a6",
+          "habit_type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "mindfulness",
+      "name": "Mindfulness",
+      "nameKey": "templateCategoryMindfulness",
+      "icon": "sparkles",
+      "color": "#ec4899",
+      "habits": [
+        {
+          "name": "Mood",
+          "nameKey": "templateMood",
+          "icon": "smile",
+          "color": "#f59e0b",
+          "habit_type": "rating",
+          "max_value": 5
+        },
+        {
+          "name": "Gratitude",
+          "nameKey": "templateGratitude",
+          "icon": "heart-handshake",
+          "color": "#ec4899",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Energy Level",
+          "nameKey": "templateEnergyLevel",
+          "icon": "zap",
+          "color": "#eab308",
+          "habit_type": "rating",
+          "max_value": 5
+        },
+        {
+          "name": "Deep Breathing",
+          "nameKey": "templateDeepBreathing",
+          "icon": "wind",
+          "color": "#06b6d4",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Stress Level",
+          "nameKey": "templateStressLevel",
+          "icon": "thermometer",
+          "color": "#ef4444",
+          "habit_type": "rating",
+          "max_value": 5
+        }
+      ]
+    },
+    {
+      "id": "social",
+      "name": "Social",
+      "nameKey": "templateCategorySocial",
+      "icon": "users",
+      "color": "#3b82f6",
+      "habits": [
+        {
+          "name": "Call Family",
+          "nameKey": "templateCallFamily",
+          "icon": "phone",
+          "color": "#22c55e",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Meet Friends",
+          "nameKey": "templateMeetFriends",
+          "icon": "users",
+          "color": "#3b82f6",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Random Act of Kindness",
+          "nameKey": "templateKindness",
+          "icon": "hand-heart",
+          "color": "#ec4899",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Quality Time",
+          "nameKey": "templateQualityTime",
+          "icon": "clock",
+          "color": "#f59e0b",
+          "habit_type": "value",
+          "unit": "min"
+        }
+      ]
+    },
+    {
+      "id": "creativity",
+      "name": "Creativity",
+      "nameKey": "templateCategoryCreativity",
+      "icon": "palette",
+      "color": "#f472b6",
+      "habits": [
+        {
+          "name": "Drawing",
+          "nameKey": "templateDrawing",
+          "icon": "palette",
+          "color": "#f472b6",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Music Practice",
+          "nameKey": "templateMusicPractice",
+          "icon": "music",
+          "color": "#8b5cf6",
+          "habit_type": "value",
+          "unit": "min"
+        },
+        {
+          "name": "Writing",
+          "nameKey": "templateWriting",
+          "icon": "feather",
+          "color": "#64748b",
+          "habit_type": "value",
+          "unit": "words"
+        },
+        {
+          "name": "Photography",
+          "nameKey": "templatePhotography",
+          "icon": "camera",
+          "color": "#0ea5e9",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Coding",
+          "nameKey": "templateCoding",
+          "icon": "code",
+          "color": "#22d3ee",
+          "habit_type": "value",
+          "unit": "min"
+        }
+      ]
+    },
+    {
+      "id": "intimacy",
+      "name": "Intimacy",
+      "nameKey": "templateCategoryIntimacy",
+      "icon": "heart",
+      "color": "#e11d48",
+      "habits": [
+        {
+          "name": "Intimacy",
+          "nameKey": "templateIntimacy",
+          "icon": "heart",
+          "color": "#e11d48",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Quality Time with Partner",
+          "nameKey": "templatePartnerTime",
+          "icon": "heart-handshake",
+          "color": "#ec4899",
+          "habit_type": "value",
+          "unit": "min"
+        },
+        {
+          "name": "Date Night",
+          "nameKey": "templateDateNight",
+          "icon": "wine",
+          "color": "#a855f7",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Compliment Partner",
+          "nameKey": "templateComplimentPartner",
+          "icon": "message-heart",
+          "color": "#f472b6",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Physical Affection",
+          "nameKey": "templatePhysicalAffection",
+          "icon": "hand-holding-heart",
+          "color": "#fb7185",
+          "habit_type": "counter",
+          "unit": "times"
+        }
+      ]
+    },
+    {
+      "id": "finance",
+      "name": "Finance",
+      "nameKey": "templateCategoryFinance",
+      "icon": "wallet",
+      "color": "#059669",
+      "habits": [
+        {
+          "name": "Track Expenses",
+          "nameKey": "templateTrackExpenses",
+          "icon": "receipt",
+          "color": "#059669",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "No Impulse Buying",
+          "nameKey": "templateNoImpulseBuying",
+          "icon": "shopping-cart",
+          "color": "#dc2626",
+          "habit_type": "boolean"
+        },
+        {
+          "name": "Save Money",
+          "nameKey": "templateSaveMoney",
+          "icon": "piggy-bank",
+          "color": "#f59e0b",
+          "habit_type": "value",
+          "unit": "$"
+        },
+        {
+          "name": "Review Budget",
+          "nameKey": "templateReviewBudget",
+          "icon": "calculator",
+          "color": "#6366f1",
+          "habit_type": "boolean"
+        }
+      ]
+    }
+  ]
+}

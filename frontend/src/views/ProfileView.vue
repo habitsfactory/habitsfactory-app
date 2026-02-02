@@ -641,13 +641,13 @@ onUnmounted(() => {
                                             </span>
                                             <!-- Tags -->
                                             <span v-for="tag in habit.tags" :key="tag.id"
-                                                class="text-xs px-2 py-1 rounded-full font-bold flex items-center justify-center group cursor-pointer min-w-8"
+                                                class="text-xs px-2 py-1 rounded-full font-bold flex items-center justify-center group min-w-8"
                                                 :style="{
                                                     backgroundColor: tag.color + '20',
                                                     color: tag.color
                                                 }">
                                                 <span>{{ tag.name }}</span>
-                                                <X :size="12" class="hidden group-hover:block ml-2"
+                                                <X :size="12" class="hidden group-hover:block ml-2 cursor-pointer"
                                                     @click.stop="removeTagFromHabit(habit.id, tag.id)" />
                                             </span>
                                             <!-- Add Tag Button -->
