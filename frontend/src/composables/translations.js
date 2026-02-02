@@ -3,7 +3,7 @@ export const translations = {
     // Header
     appName: 'Habits Factory',
     tagline: 'Daily evolution, quantified.',
-    newHabit: 'New Habit',
+    newHabit: 'Habit',
     logout: 'Logout',
 
     // Tabs
@@ -206,6 +206,12 @@ export const translations = {
     invalidCredentials: 'Invalid email or password',
     emailPlaceholder: 'you@example.com',
 
+    // New Habit Dropdown
+    createCustom: 'Create Custom',
+    createCustomDesc: 'Build your own habit from scratch',
+    fromTemplates: 'From Templates',
+    fromTemplatesDesc: 'Choose from pre-made habits',
+
     // Habit Templates
     addFromTemplates: 'Add from Templates',
     habitTemplates: 'Habit Templates',
@@ -267,7 +273,7 @@ export const translations = {
     // Header
     appName: 'Habits Factory',
     tagline: 'Évolution quotidienne, quantifiée.',
-    newHabit: 'Nouvelle Habitude',
+    newHabit: 'Habitude',
     logout: 'Déconnexion',
 
     // Tabs
@@ -456,6 +462,12 @@ export const translations = {
     signUp: "S'inscrire",
     invalidCredentials: 'Email ou mot de passe invalide',
     emailPlaceholder: 'courriel@domaine.com',
+
+    // New Habit Dropdown
+    createCustom: 'Créer personnalisé',
+    createCustomDesc: 'Construire votre propre habitude',
+    fromTemplates: 'Depuis les modèles',
+    fromTemplatesDesc: 'Choisir parmi les habitudes prédéfinies',
 
     // Habit Templates
     addFromTemplates: 'Ajouter depuis les modèles',

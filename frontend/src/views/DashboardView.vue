@@ -6,13 +6,15 @@ import { useDarkMode } from '@/composables/useDarkMode'
 import { useLanguage } from '@/composables/useLanguage'
 import { useHabits } from '@/composables/useHabits'
 import { useCategories } from '@/composables/useCategories'
-import { Plus, X, ChevronDown, Moon, Sun, BarChart3, FileText, Calendar, Languages, Check, Brain, LogOut } from 'lucide-vue-next'
+import * as LucideIcons from 'lucide-vue-next'
+import { Plus, X, ChevronDown, Moon, Sun, BarChart3, FileText, Calendar, Languages, Check, Brain, LogOut, Sparkles, RefreshCw, PenLine } from 'lucide-vue-next'
 import IconPicker from '@/components/IconPicker.vue'
 import TrackingTab from '@/components/TrackingTab.vue'
 import InsightsTab from '@/components/InsightsTab.vue'
 import SummaryTab from '@/components/SummaryTab.vue'
 import GraphTab from '@/components/GraphTab.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
+import habitTemplatesData from '@/data/habitTemplates.json'
 
 const router = useRouter()
 const { isDark, toggleDarkMode } = useDarkMode()
@@ -23,9 +25,20 @@ const { categories, fetchCategories } = useCategories()
 // Language dropdown state
 const isLanguageDropdownOpen = ref(false)
 
+// New habit dropdown state
+const isNewHabitDropdownOpen = ref(false)
+
 // --- STATE ---
 const isModalOpen = ref(false)
+const isTemplateModalOpen = ref(false)
+const isAddingTemplate = ref(false)
 const activeTab = ref('tracking')
+
+// Template data
+const habitTemplates = habitTemplatesData.categories
+
+// Ref to TrackingTab for refreshing
+const trackingTabRef = ref(null)
 
 // Form Refs for New Habit
 const newHabitName = ref('')
@@ -81,20 +94,62 @@ const selectLanguage = (langCode) => {
   isLanguageDropdownOpen.value = false
 }
 
-// Close dropdown when clicking outside
-const closeLanguageDropdown = (event) => {
+// Get icon component from name
+const getIcon = (iconName) => {
+  if (!iconName) return LucideIcons.Calendar
+  const pascalCase = iconName
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('')
+  return LucideIcons[pascalCase] || LucideIcons.Calendar
+}
+
+// Add habit from template
+const addHabitFromTemplate = async (template) => {
+  isAddingTemplate.value = true
+  try {
+    await addHabitApi({
+      name: t(template.nameKey) || template.name,
+      habit_type: template.habit_type,
+      icon: template.icon,
+      color: template.color,
+      unit: template.unit || null,
+      max_value: template.max_value || null
+    })
+    isTemplateModalOpen.value = false
+    // Refresh the tracking tab
+    if (trackingTabRef.value?.refreshHabits) {
+      trackingTabRef.value.refreshHabits()
+    }
+  } catch (err) {
+    console.error('Failed to add habit from template:', err)
+  } finally {
+    isAddingTemplate.value = false
+  }
+}
+
+// Handle opening template modal from TrackingTab empty state
+const openTemplateModal = () => {
+  isTemplateModalOpen.value = true
+}
+
+// Close dropdowns when clicking outside
+const closeDropdowns = (event) => {
   if (!event.target.closest('.language-dropdown-container')) {
     isLanguageDropdownOpen.value = false
+  }
+  if (!event.target.closest('.new-habit-dropdown-container')) {
+    isNewHabitDropdownOpen.value = false
   }
 }
 
 onMounted(() => {
   fetchCategories()
-  document.addEventListener('click', closeLanguageDropdown)
+  document.addEventListener('click', closeDropdowns)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeLanguageDropdown)
+  document.removeEventListener('click', closeDropdowns)
 })
 
 </script>
@@ -148,10 +203,39 @@ onUnmounted(() => {
             <Sun v-else :size="20" stroke-width="2.5" />
           </button>
 
-          <button @click="isModalOpen = true"
-            class="bg-primary-600 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-primary-800 transition-all shadow-md active:scale-95">
-            <Plus :size="20" stroke-width="3" /> {{ t('newHabit') }}
-          </button>
+          <!-- New Habit Dropdown -->
+          <div class="relative new-habit-dropdown-container">
+            <button @click="isNewHabitDropdownOpen = !isNewHabitDropdownOpen"
+              class="bg-primary-600 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-primary-800 transition-all shadow-md active:scale-95">
+              <Plus :size="20" stroke-width="3" />
+              <span>{{ t('newHabit') }}</span>
+              <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isNewHabitDropdownOpen }"
+                class="transition-transform" />
+            </button>
+
+            <!-- Dropdown Menu -->
+            <Transition name="dropdown">
+              <div v-if="isNewHabitDropdownOpen"
+                class="absolute top-full mt-2 right-0 bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 py-2 min-w-56 z-50">
+                <button @click="isModalOpen = true; isNewHabitDropdownOpen = false"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                  <PenLine :size="20" class="text-primary-600" stroke-width="2.5" />
+                  <div>
+                    <span class="font-bold text-neutral-900 dark:text-white block">{{ t('createCustom') }}</span>
+                    <span class="text-xs text-neutral-500">{{ t('createCustomDesc') }}</span>
+                  </div>
+                </button>
+                <button @click="isTemplateModalOpen = true; isNewHabitDropdownOpen = false"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                  <Sparkles :size="20" class="text-amber-500" stroke-width="2.5" />
+                  <div>
+                    <span class="font-bold text-neutral-900 dark:text-white block">{{ t('fromTemplates') }}</span>
+                    <span class="text-xs text-neutral-500">{{ t('fromTemplatesDesc') }}</span>
+                  </div>
+                </button>
+              </div>
+            </Transition>
+          </div>
 
           <button @click="handleLogout"
             class="bg-red-500 text-white px-6 py-4 rounded-2xl font-bold hover:bg-red-700 transition-all shadow-md active:scale-95">
@@ -209,7 +293,7 @@ onUnmounted(() => {
       <!-- Tab Content -->
 
       <!-- Tracking Tab -->
-      <TrackingTab v-show="activeTab === 'tracking'" />
+      <TrackingTab ref="trackingTabRef" v-show="activeTab === 'tracking'" @open-template-modal="openTemplateModal" />
 
       <!-- Summary Tab -->
       <SummaryTab v-show="activeTab === 'summary'" />
@@ -300,6 +384,86 @@ onUnmounted(() => {
               {{ t('initiateHabit') }}
             </button>
           </form>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Template Modal -->
+    <Transition name="fade">
+      <div v-if="isTemplateModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-neutral-900/60 backdrop-blur-md" @click="isTemplateModalOpen = false"></div>
+        <div
+          class="relative z-10 bg-white dark:bg-neutral-800 w-full max-w-4xl max-h-[85vh] rounded-4xl shadow-2xl overflow-hidden flex flex-col">
+          <!-- Modal Header -->
+          <div class="shrink-0 p-8 pb-4 border-b border-neutral-100 dark:border-neutral-700">
+            <div class="absolute top-0 left-0 right-0 h-2 bg-primary-600"></div>
+            <div class="flex justify-between items-center">
+              <div>
+                <h2 class="text-3xl font-black text-neutral-900 dark:text-white">{{ t('habitTemplates') }}</h2>
+                <p class="text-neutral-500 dark:text-neutral-400 mt-1">{{ t('selectHabitTemplate') }}</p>
+              </div>
+              <button @click="isTemplateModalOpen = false"
+                class="text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition p-2">
+                <X :size="28" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Modal Content - Scrollable -->
+          <div class="flex-1 overflow-y-auto p-8 space-y-8">
+            <!-- Loading Overlay -->
+            <div v-if="isAddingTemplate"
+              class="absolute inset-0 bg-white/80 dark:bg-neutral-800/80 flex items-center justify-center z-10">
+              <RefreshCw :size="40" class="animate-spin text-primary-600" />
+            </div>
+
+            <!-- Category Groups -->
+            <div v-for="category in habitTemplates" :key="category.id" class="space-y-4">
+              <!-- Category Header -->
+              <div class="flex items-center gap-3">
+                <div class="p-2 rounded-xl" :style="{ backgroundColor: category.color + '20' }">
+                  <component :is="getIcon(category.icon)" :size="20" :style="{ color: category.color }"
+                    stroke-width="2.5" />
+                </div>
+                <h3 class="text-lg font-black text-neutral-900 dark:text-white uppercase tracking-tight">
+                  {{ t(category.nameKey) || category.name }}
+                </h3>
+                <div class="flex-1 h-px bg-linear-to-r from-neutral-200 dark:from-neutral-700 to-transparent"></div>
+              </div>
+
+              <!-- Habit Cards Grid -->
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <button v-for="habit in category.habits" :key="habit.nameKey" @click="addHabitFromTemplate(habit)"
+                  :disabled="isAddingTemplate"
+                  class="bg-neutral-50 dark:bg-neutral-700/50 hover:bg-white dark:hover:bg-neutral-700 border border-neutral-100 dark:border-neutral-600 hover:border-neutral-200 dark:hover:border-neutral-500 rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group">
+                  <!-- Habit Icon & Name -->
+                  <div class="flex items-center gap-3 mb-2">
+                    <div class="p-2 rounded-xl transition-colors" :style="{ backgroundColor: habit.color + '20' }">
+                      <component :is="getIcon(habit.icon)" :size="18" :style="{ color: habit.color }"
+                        stroke-width="2.5" />
+                    </div>
+                    <span class="font-bold text-neutral-900 dark:text-white text-sm truncate">
+                      {{ t(habit.nameKey) || habit.name }}
+                    </span>
+                  </div>
+                  <!-- Habit Type Badge -->
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg" :class="{
+                      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': habit.habit_type === 'boolean',
+                      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': habit.habit_type === 'counter',
+                      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400': habit.habit_type === 'value',
+                      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400': habit.habit_type === 'rating'
+                    }">
+                      {{ t(habit.habit_type) }}
+                    </span>
+                    <span v-if="habit.unit" class="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium">
+                      {{ habit.unit }}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Transition>

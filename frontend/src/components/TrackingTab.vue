@@ -7,10 +7,11 @@ import { useTags } from '@/composables/useTags'
 import { useCookies } from '@/composables/useCookies'
 import * as LucideIcons from 'lucide-vue-next'
 import { RefreshCw, ChevronLeft, ChevronRight, LayoutGrid, List, Star, Plus, Minus, Archive, Trash2, Pencil, CheckCircle2, GripVertical, Filter, ChevronDown, X, Sparkles } from 'lucide-vue-next'
-import habitTemplatesData from '@/data/habitTemplates.json'
+
+const emit = defineEmits(['open-template-modal'])
 
 const { t } = useLanguage()
-const { habits, isLoadingHabits, fetchHabits, archiveHabit, deleteActiveHabit, deleteArchivedHabit, saveCompletion, addHabit } = useHabits()
+const { habits, isLoadingHabits, fetchHabits, archiveHabit, deleteActiveHabit, deleteArchivedHabit, saveCompletion } = useHabits()
 const { categories, categoryOrder, fetchCategories, saveLayoutToServer } = useCategories()
 const { tags, fetchTags } = useTags()
 const { setCookie, getCookie } = useCookies()
@@ -31,10 +32,6 @@ const selectedCategories = ref([])
 const selectedTags = ref([])
 const filterSectionRef = ref(null)
 
-// Template modal state
-const isTemplateModalOpen = ref(false)
-const habitTemplates = habitTemplatesData.categories
-const isAddingTemplate = ref(false)
 
 const handleClickOutside = (event) => {
     if (isFilterExpanded.value && filterSectionRef.value && !filterSectionRef.value.contains(event.target)) {
@@ -275,26 +272,12 @@ const handleDelete = async (habitId) => {
     }
 }
 
-// Add habit from template
-const addHabitFromTemplate = async (template) => {
-    isAddingTemplate.value = true
-    try {
-        await addHabit({
-            name: t(template.nameKey) || template.name,
-            habit_type: template.habit_type,
-            icon: template.icon,
-            color: template.color,
-            unit: template.unit || null,
-            max_value: template.max_value || null
-        })
-        isTemplateModalOpen.value = false
-        fetchHabits(trackingDateString.value)
-    } catch (err) {
-        console.error('Failed to add habit from template:', err)
-    } finally {
-        isAddingTemplate.value = false
-    }
+// Expose refresh method for parent component
+const refreshHabits = () => {
+    fetchHabits(trackingDateString.value)
 }
+
+defineExpose({ refreshHabits })
 
 onMounted(() => {
     loadViewPreference()
@@ -512,9 +495,9 @@ const handleDrop = (e, targetCategoryId) => {
                                     ? 'ring-2 ring-offset-2 ring-primary-500'
                                     : 'hover:opacity-80'
                             ]" :style="{
-                                    backgroundColor: tag.color + '20',
-                                    color: tag.color
-                                }">
+                                backgroundColor: tag.color + '20',
+                                color: tag.color
+                            }">
                                 <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: tag.color }"></span>
                                 {{ tag.name }}
                             </button>
@@ -539,8 +522,8 @@ const handleDrop = (e, targetCategoryId) => {
                 @dragover="handleDragOver($event, group.id)" @dragenter="handleDragEnter($event, group.id)"
                 @dragleave="handleDragLeave" @drop="handleDrop($event, group.id)">
                 <!-- Group Header -->
-                <div class="flex items-center gap-3 px-2 cursor-grab active:cursor-grabbing"
-                    draggable="true" @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
+                <div class="flex items-center gap-3 px-2 cursor-grab active:cursor-grabbing" draggable="true"
+                    @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
                     <GripVertical :size="20"
                         class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 shrink-0" />
                     <div class="w-2 h-6 bg-yellow-500 rounded-full shrink-0"></div>
@@ -568,6 +551,13 @@ const handleDrop = (e, targetCategoryId) => {
                                 <p v-if="habit.unit" class="text-xs font-bold text-neutral-400 uppercase tracking-wide">
                                     {{ habit.unit }}
                                 </p>
+                                <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
+                                    <span v-for="tag in habit.tags" :key="tag.id"
+                                        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+                                        :style="{ backgroundColor: tag.color + '20', color: tag.color }">
+                                        {{ tag.name }}
+                                    </span>
+                                </div>
                             </div>
                             <div v-if="habit.is_saving">
                                 <RefreshCw :size="20" class="animate-spin text-yellow-500" />
@@ -633,9 +623,16 @@ const handleDrop = (e, targetCategoryId) => {
                                 stroke-width="2.5" />
                         </div>
 
-                        <!-- Name -->
-                        <div class="flex-1">
+                        <!-- Name and Tags -->
+                        <div class="flex-1 flex items-center gap-3">
                             <h4 class="font-bold text-neutral-900 dark:text-white">{{ habit.name }}</h4>
+                            <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1">
+                                <span v-for="tag in habit.tags" :key="tag.id"
+                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+                                    :style="{ backgroundColor: tag.color + '20', color: tag.color }">
+                                    {{ tag.name }}
+                                </span>
+                            </div>
                         </div>
 
                         <!-- Compact Controls -->
@@ -671,8 +668,7 @@ const handleDrop = (e, targetCategoryId) => {
 
                             <!-- Value -->
                             <input v-else-if="habit.habit_type === 'value'" :value="habit.today_value || ''"
-                                @change="updateValue(habit, $event.target.value)" type="number" step="1"
-                                placeholder="0"
+                                @change="updateValue(habit, $event.target.value)" type="number" step="1" placeholder="0"
                                 class="w-24 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-yellow-500 transition text-neutral-900 dark:text-white" />
 
                             <!-- Rating -->
@@ -710,7 +706,7 @@ const handleDrop = (e, targetCategoryId) => {
                     <h3 class="text-2xl font-black text-neutral-900 dark:text-white mb-2">{{ t('noHabitsYet') }}
                     </h3>
                     <p class="text-neutral-500 dark:text-neutral-400 mb-6">{{ t('createFirstHabit') }}</p>
-                    <button @click="isTemplateModalOpen = true"
+                    <button @click="emit('open-template-modal')"
                         class="inline-flex items-center gap-3 px-8 py-4 bg-primary-600 text-white rounded-2xl font-bold hover:bg-primary-700 transition-all shadow-lg active:scale-95">
                         <Sparkles :size="20" stroke-width="2.5" />
                         {{ t('addFromTemplates') }}
@@ -718,86 +714,6 @@ const handleDrop = (e, targetCategoryId) => {
                 </template>
             </div>
         </template>
-
-        <!-- Template Modal -->
-        <Teleport to="body">
-            <Transition name="fade">
-                <div v-if="isTemplateModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div class="absolute inset-0 bg-neutral-900/60 backdrop-blur-md" @click="isTemplateModalOpen = false"></div>
-                    <div class="relative z-10 bg-white dark:bg-neutral-800 w-full max-w-4xl max-h-[85vh] rounded-4xl shadow-2xl overflow-hidden flex flex-col">
-                        <!-- Modal Header -->
-                        <div class="shrink-0 p-8 pb-4 border-b border-neutral-100 dark:border-neutral-700">
-                            <div class="absolute top-0 left-0 right-0 h-2 bg-primary-600"></div>
-                            <div class="flex justify-between items-center">
-                                <div>
-                                    <h2 class="text-3xl font-black text-neutral-900 dark:text-white">{{ t('habitTemplates') }}</h2>
-                                    <p class="text-neutral-500 dark:text-neutral-400 mt-1">{{ t('selectHabitTemplate') }}</p>
-                                </div>
-                                <button @click="isTemplateModalOpen = false"
-                                    class="text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition p-2">
-                                    <X :size="28" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Modal Content - Scrollable -->
-                        <div class="flex-1 overflow-y-auto p-8 space-y-8">
-                            <!-- Loading Overlay -->
-                            <div v-if="isAddingTemplate" class="absolute inset-0 bg-white/80 dark:bg-neutral-800/80 flex items-center justify-center z-10">
-                                <RefreshCw :size="40" class="animate-spin text-primary-600" />
-                            </div>
-
-                            <!-- Category Groups -->
-                            <div v-for="category in habitTemplates" :key="category.id" class="space-y-4">
-                                <!-- Category Header -->
-                                <div class="flex items-center gap-3">
-                                    <div class="p-2 rounded-xl" :style="{ backgroundColor: category.color + '20' }">
-                                        <component :is="getIcon(category.icon)" :size="20" :style="{ color: category.color }" stroke-width="2.5" />
-                                    </div>
-                                    <h3 class="text-lg font-black text-neutral-900 dark:text-white uppercase tracking-tight">
-                                        {{ t(category.nameKey) || category.name }}
-                                    </h3>
-                                    <div class="flex-1 h-px bg-linear-to-r from-neutral-200 dark:from-neutral-700 to-transparent"></div>
-                                </div>
-
-                                <!-- Habit Cards Grid -->
-                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                    <button v-for="habit in category.habits" :key="habit.nameKey"
-                                        @click="addHabitFromTemplate(habit)"
-                                        :disabled="isAddingTemplate"
-                                        class="bg-neutral-50 dark:bg-neutral-700/50 hover:bg-white dark:hover:bg-neutral-700 border border-neutral-100 dark:border-neutral-600 hover:border-neutral-200 dark:hover:border-neutral-500 rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group">
-                                        <!-- Habit Icon & Name -->
-                                        <div class="flex items-center gap-3 mb-2">
-                                            <div class="p-2 rounded-xl transition-colors" :style="{ backgroundColor: habit.color + '20' }">
-                                                <component :is="getIcon(habit.icon)" :size="18" :style="{ color: habit.color }" stroke-width="2.5" />
-                                            </div>
-                                            <span class="font-bold text-neutral-900 dark:text-white text-sm truncate">
-                                                {{ t(habit.nameKey) || habit.name }}
-                                            </span>
-                                        </div>
-                                        <!-- Habit Type Badge -->
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg"
-                                                :class="{
-                                                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': habit.habit_type === 'boolean',
-                                                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': habit.habit_type === 'counter',
-                                                    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400': habit.habit_type === 'value',
-                                                    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400': habit.habit_type === 'rating'
-                                                }">
-                                                {{ t(habit.habit_type) }}
-                                            </span>
-                                            <span v-if="habit.unit" class="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium">
-                                                {{ habit.unit }}
-                                            </span>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </Transition>
-        </Teleport>
     </div>
 </template>
 
@@ -822,16 +738,5 @@ const handleDrop = (e, targetCategoryId) => {
 .slide-leave-to {
     opacity: 0;
     transform: translateY(-10px);
-}
-
-/* Modal fade transition */
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
 }
 </style>
