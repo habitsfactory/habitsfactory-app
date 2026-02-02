@@ -1,5 +1,5 @@
 # Multi-stage build for Django backend
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -23,21 +23,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser
+
+# Copy Python dependencies from builder to a shared location
+COPY --from=builder /root/.local /home/appuser/.local
+ENV PATH=/home/appuser/.local/bin:$PATH
+ENV PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages
 
 # Copy application code
 COPY . .
 
-# Create staticfiles directory
-RUN mkdir -p /app/staticfiles
+# Create staticfiles and log directories
+RUN mkdir -p /app/staticfiles /var/log/django
 
 # Collect static files (won't have much initially, but structure is there)
 RUN python manage.py collectstatic --noinput --settings=app.settings.production || true
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Set ownership and switch to non-root user
+RUN chown -R appuser:appuser /app /home/appuser/.local /var/log/django
 USER appuser
 
 # Expose port
