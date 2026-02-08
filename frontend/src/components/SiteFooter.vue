@@ -27,7 +27,7 @@ const goToExport = () => {
         <div class="dark:text-white max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div class="flex flex-col gap-4">
                 <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer">
-                    <img src="/logo.png" alt="Habits Factory Logo" class="h-32 w-32 object-contain center" />
+                    <img src="/logo_edition.svg" alt="Habits Factory Logo" class="h-32 w-32 object-contain center" />
                 </a>
                 <span class="text-xl font-bold tracking-tight">Habits Factory</span>
                 <p class="text-sm text-gray-400">Building better routines, one day at a time.</p>

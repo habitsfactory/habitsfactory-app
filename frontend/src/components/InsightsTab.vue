@@ -46,7 +46,7 @@ const getCorrelationBadgeColor = (strength) => {
         'very_strong': 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
         'strong': 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
         'moderate': 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
-        'weak': 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
+        'weak': 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300',
         'very_weak': 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
     }
     return colors[strength] || colors['moderate']
@@ -72,15 +72,15 @@ onMounted(() => {
 <template>
     <div class="space-y-6">
         <!-- Insights Header -->
-        <div class="bg-linear-to-r from-yellow-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
+        <div class="bg-linear-to-r from-primary-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
             <h2 class="text-3xl font-black text-white mb-2">{{ t('insights') }}</h2>
-            <p class="text-yellow-100 font-medium">{{ t('discoverCorrelations') }}</p>
+            <p class="text-primary-100 font-medium">{{ t('discoverCorrelations') }}</p>
         </div>
 
         <!-- Loading State for Insights -->
         <div v-if="isFetchingInsights" class="flex items-center justify-center py-20">
             <div class="text-center">
-                <RefreshCw :size="40" class="animate-spin text-yellow-500 mx-auto mb-4" />
+                <RefreshCw :size="40" class="animate-spin text-primary-500 mx-auto mb-4" />
                 <p class="text-neutral-600 dark:text-neutral-400 font-bold">{{ t('loading') }}</p>
             </div>
         </div>
@@ -97,7 +97,7 @@ onMounted(() => {
                             class="px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider">
                             {{ getStrengthLabel(insight.strength) }}
                         </span>
-                        <span class="text-3xl font-black text-yellow-600 dark:text-yellow-400">
+                        <span class="text-3xl font-black text-primary-600 dark:text-primary-400">
                             {{ (insight.max_correlation * 100).toFixed(0) }}%
                         </span>
                     </div>
@@ -153,7 +153,7 @@ onMounted(() => {
 
                     <!-- Description -->
                     <div
-                        class="p-4 bg-linear-to-r from-yellow-50 to-purple-50 dark:from-yellow-950 dark:to-purple-950 rounded-2xl">
+                        class="p-4 bg-linear-to-r from-primary-50 to-purple-50 dark:from-primary-950 dark:to-purple-950 rounded-2xl">
                         <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300 leading-relaxed">
                             {{ insight.description }}
                         </p>

@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/habitsfactory/habitsfactory-app/blob/main/res/logo.png?raw=true" width="256">
+<img src="https://github.com/habitsfactory/habitsfactory-app/blob/main/res/logo_edition.svg" width="256">
 </p>
 
 **Habits Factory** is a **power-user–oriented habit-tracking engine** built for precision, insight, and long-term behavioral optimization.

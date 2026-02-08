@@ -97,7 +97,7 @@ onMounted(() => {
                 <!-- Loading state while checking registration status -->
                 <div v-if="isCheckingSettings" class="text-center py-8">
                     <div
-                        class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-neutral-300 border-t-yellow-600">
+                        class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-neutral-300 border-t-primary-600">
                     </div>
                     <p class="mt-4 text-neutral-500 dark:text-neutral-400">{{ t('checkRegistrationStatus') }}</p>
                 </div>
@@ -133,7 +133,7 @@ onMounted(() => {
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
                             t('username') }}</label>
                         <input v-model="username" type="text" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter username" />
                     </div>
 
@@ -141,7 +141,7 @@ onMounted(() => {
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('email')
                             }}</label>
                         <input v-model="email" type="email" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter email" />
                     </div>
 
@@ -149,19 +149,19 @@ onMounted(() => {
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
                             t('password') }}</label>
                         <input v-model="password1" type="password" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter password" />
                     </div>
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('confirmPassword') }}</label>
                         <input v-model="password2" type="password" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Confirm password" />
                     </div>
 
                     <button type="submit" :disabled="isLoading"
-                        class="w-full bg-yellow-600 text-white py-4 rounded-2xl font-bold hover:bg-yellow-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="w-full bg-primary-600 text-white py-4 rounded-2xl font-bold hover:bg-primary-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ isLoading ? 'Creating Account...' : 'Register' }}
                     </button>
 
@@ -169,7 +169,7 @@ onMounted(() => {
                         <p class="text-sm text-neutral-500 dark:text-neutral-400">
                             {{ t('signupMessage') }}
                             <router-link to="/login"
-                                class="text-yellow-600 dark:text-yellow-400 font-bold hover:underline">
+                                class="text-primary-600 dark:text-primary-400 font-bold hover:underline">
                                 {{ t('loginHere') }}
                             </router-link>
                         </p>

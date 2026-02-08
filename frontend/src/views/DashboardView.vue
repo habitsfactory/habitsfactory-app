@@ -161,7 +161,7 @@ onUnmounted(() => {
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
         <div class="flex items-center gap-4">
           <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer">
-            <img src="/logo.png" alt="App Logo" class="h-22 w-22" />
+            <img src="/logo_edition.svg" alt="App Logo" class="h-22 w-22" />
           </a>
           <div>
             <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic">
@@ -171,38 +171,6 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex gap-4">
-          <!-- Language Selector -->
-          <div class="relative language-dropdown-container">
-            <button @click="isLanguageDropdownOpen = !isLanguageDropdownOpen"
-              class="bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all shadow-md active:scale-95">
-              <Languages :size="20" stroke-width="2.5" />
-              <span class="text-xl">{{ currentLanguageInfo.flag }}</span>
-              <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isLanguageDropdownOpen }"
-                class="transition-transform" />
-            </button>
-
-            <!-- Language Dropdown -->
-            <Transition name="dropdown">
-              <div v-if="isLanguageDropdownOpen"
-                class="absolute top-full mt-2 right-0 bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 py-2 min-w-50 z-50">
-                <button v-for="lang in languages" :key="lang.code" @click="selectLanguage(lang.code)"
-                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
-                  <span class="text-xl">{{ lang.flag }}</span>
-                  <span class="font-bold text-neutral-900 dark:text-white">{{ lang.name }}</span>
-                  <Check v-if="currentLanguage === lang.code" :size="16"
-                    class="ml-auto text-yellow-600 dark:text-yellow-400" stroke-width="3" />
-                </button>
-              </div>
-            </Transition>
-          </div>
-
-          <!-- Dark Mode Toggle -->
-          <button @click="toggleDarkMode"
-            class="bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-yellow-400 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all shadow-md active:scale-95">
-            <Moon v-if="!isDark" :size="20" stroke-width="2.5" />
-            <Sun v-else :size="20" stroke-width="2.5" />
-          </button>
-
           <!-- New Habit Dropdown -->
           <div class="relative new-habit-dropdown-container">
             <button @click="isNewHabitDropdownOpen = !isNewHabitDropdownOpen"
@@ -227,7 +195,7 @@ onUnmounted(() => {
                 </button>
                 <button @click="isTemplateModalOpen = true; isNewHabitDropdownOpen = false"
                   class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
-                  <Sparkles :size="20" class="text-amber-500" stroke-width="2.5" />
+                  <Sparkles :size="20" class="text-primary-500" stroke-width="2.5" />
                   <div>
                     <span class="font-bold text-neutral-900 dark:text-white block">{{ t('fromTemplates') }}</span>
                     <span class="text-xs text-neutral-500">{{ t('fromTemplatesDesc') }}</span>
@@ -237,8 +205,40 @@ onUnmounted(() => {
             </Transition>
           </div>
 
+          <!-- Language Selector -->
+          <div class="relative language-dropdown-container">
+            <button @click="isLanguageDropdownOpen = !isLanguageDropdownOpen"
+              class="bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all shadow-md active:scale-95">
+              <Languages :size="20" stroke-width="2.5" />
+              <span class="text-xl">{{ currentLanguageInfo.flag }}</span>
+              <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isLanguageDropdownOpen }"
+                class="transition-transform" />
+            </button>
+
+            <!-- Language Dropdown -->
+            <Transition name="dropdown">
+              <div v-if="isLanguageDropdownOpen"
+                class="absolute top-full mt-2 right-0 bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 py-2 min-w-50 z-50">
+                <button v-for="lang in languages" :key="lang.code" @click="selectLanguage(lang.code)"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                  <span class="text-xl">{{ lang.flag }}</span>
+                  <span class="font-bold text-neutral-900 dark:text-white">{{ lang.name }}</span>
+                  <Check v-if="currentLanguage === lang.code" :size="16"
+                    class="ml-auto text-primary-600 dark:text-primary-400" stroke-width="3" />
+                </button>
+              </div>
+            </Transition>
+          </div>
+
+          <!-- Dark Mode Toggle -->
+          <button @click="toggleDarkMode"
+            class="bg-neutral-200 dark:bg-neutral-800 text-yellow-500 dark:text-yellow-700 dark:text-primary-400 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all shadow-md active:scale-95">
+            <Moon v-if="!isDark" :size="20" stroke-width="2.5" />
+            <Sun v-else :size="20" stroke-width="2.5" />
+          </button>
+
           <button @click="handleLogout"
-            class="bg-red-500 text-white px-6 py-4 rounded-2xl font-bold hover:bg-red-700 transition-all shadow-md active:scale-95">
+            class="bg-neutral-200 text-red-600 px-6 py-4 rounded-2xl font-bold hover:bg-neutral-300 transition-all shadow-md active:scale-95 dark:bg-neutral-800 dark:hover:bg-neutral-700">
             <LogOut :size="20" stroke-width="2.5" />
           </button>
         </div>
@@ -329,7 +329,7 @@ onUnmounted(() => {
                 t('objectiveName')
               }}</label>
               <input v-model="newHabitName" type="text" placeholder="e.g. Daily Sprints" required
-                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white">
+                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white">
             </div>
 
             <div class="space-y-2">
@@ -352,7 +352,7 @@ onUnmounted(() => {
                 {{ t('numberOfStars') }}
               </label>
               <input v-model.number="newHabitMaxValue" type="number" min="1" max="10" placeholder="5"
-                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white">
+                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white">
               <p class="text-xs text-neutral-400 ml-2">
                 Between 1-10 stars
               </p>
@@ -380,7 +380,7 @@ onUnmounted(() => {
             </div>
 
             <button type="submit"
-              class="w-full bg-yellow-600 text-white py-6 rounded-4xl font-black text-xl hover:bg-yellow-700 transition-all shadow-xl">
+              class="w-full bg-primary-600 text-white py-6 rounded-4xl font-black text-xl hover:bg-primary-700 transition-all shadow-xl">
               {{ t('initiateHabit') }}
             </button>
           </form>

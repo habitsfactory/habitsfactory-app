@@ -691,7 +691,7 @@ onUnmounted(() => {
                                     </button>
                                     <button @click="handleArchiveHabit(habit.id)" :title="t('archiveHabit')"
                                         class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Archive :size="18" class="text-neutral-400 hover:text-yellow-500" />
+                                        <Archive :size="18" class="text-neutral-400 hover:text-primary-500" />
                                     </button>
                                     <button @click="handleDeleteActiveHabit(habit.id)"
                                         :title="t('deleteHabitPermanently')"

@@ -6,39 +6,41 @@
 
         <div class="bg-white dark:bg-neutral-800 rounded-4xl p-12 shadow-2xl w-full max-w-md relative z-10">
             <div class="text-center mb-10">
-                <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic mb-2">{{ t('appName')
-                }}</h1>
+                <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic mb-2">
+                    {{ t('appName')
+                    }}</h1>
                 <p class="text-neutral-400 dark:text-neutral-500 font-medium">{{ t('signInToContinue') }}</p>
             </div>
 
             <form @submit.prevent="handleLogin" class="space-y-6">
-                <div v-if="errorMessage" class="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl p-4">
+                <div v-if="errorMessage"
+                    class="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl p-4">
                     <p class="text-red-600 dark:text-red-400 text-sm font-semibold">{{ errorMessage }}</p>
                 </div>
 
                 <div class="space-y-2">
                     <label class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('email')
-                    }}</label>
+                        }}</label>
                     <input v-model="email" type="email" required :placeholder="t('emailPlaceholder')"
-                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
+                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
                 </div>
 
                 <div class="space-y-2">
                     <label class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
                         t('password') }}</label>
                     <input v-model="password" type="password" required placeholder="••••••••"
-                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
+                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
                 </div>
 
                 <button type="submit" :disabled="loading"
-                    class="w-full bg-neutral-900 dark:bg-yellow-600 text-white py-6 rounded-4xl font-black text-xl hover:bg-yellow-600 dark:hover:bg-yellow-500 transition-all shadow-xl shadow-yellow-100 dark:shadow-none disabled:opacity-50">
+                    class="w-full bg-neutral-900 dark:bg-primary-600 text-white py-6 rounded-4xl font-black text-xl hover:bg-primary-600 dark:hover:bg-primary-500 transition-all shadow-xl shadow-primary-100 dark:shadow-none disabled:opacity-50">
                     {{ loading ? t('signingIn') : t('signIn') }}
                 </button>
 
                 <div class="text-center">
                     <p class="text-neutral-400 text-sm">
                         {{ t('noAccount') }}
-                        <router-link to="/register" class="text-yellow-600 font-bold hover:text-yellow-700">
+                        <router-link to="/register" class="text-primary-600 font-bold hover:text-primary-700">
                             {{ t('signUp') }}
                         </router-link>
                     </p>

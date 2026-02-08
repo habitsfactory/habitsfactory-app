@@ -137,13 +137,13 @@ onMounted(() => {
                             <label class="block text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-2">Start
                                 Date</label>
                             <input v-model="exportStartDate" type="date"
-                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary-500" />
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-2">End
                                 Date</label>
                             <input v-model="exportEndDate" type="date"
-                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary-500" />
                         </div>
                     </div>
 
@@ -152,11 +152,11 @@ onMounted(() => {
                         <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-3">Quick Select</p>
                         <div class="flex flex-wrap gap-2">
                             <button @click="setAllExportDataRange"
-                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-yellow-500 hover:text-white dark:hover:bg-yellow-600 rounded-full text-sm font-bold transition-colors">
+                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-primary-500 hover:text-white dark:hover:bg-primary-600 rounded-full text-sm font-bold transition-colors">
                                 All Data
                             </button>
                             <button v-for="year in quickSelectYears" :key="year" @click="setExportYearRange(year)"
-                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-yellow-500 hover:text-white dark:hover:bg-yellow-600 rounded-full text-sm font-bold transition-colors">
+                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-primary-500 hover:text-white dark:hover:bg-primary-600 rounded-full text-sm font-bold transition-colors">
                                 {{ year }}
                             </button>
                         </div>
@@ -164,14 +164,14 @@ onMounted(() => {
                 </div>
 
                 <!-- Export Button -->
-                <div class="bg-linear-to-r from-yellow-600 to-neutral-900 rounded-4xl p-8 shadow-lg">
+                <div class="bg-linear-to-r from-primary-600 to-neutral-900 rounded-4xl p-8 shadow-lg">
                     <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                         <div>
                             <h3 class="text-xl font-black text-white mb-1">Ready to Export?</h3>
-                            <p class="text-yellow-100 font-medium">Download your habit data as a CSV file</p>
+                            <p class="text-primary-100 font-medium">Download your habit data as a CSV file</p>
                         </div>
                         <button @click="exportToCSV" :disabled="isExporting"
-                            class="flex items-center gap-2 px-8 py-4 bg-white text-yellow-600 rounded-2xl font-black hover:bg-yellow-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            class="flex items-center gap-2 px-8 py-4 bg-white text-primary-600 rounded-2xl font-black hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <Download :size="20" />
                             {{ isExporting ? 'Exporting...' : 'Export CSV' }}
                         </button>

@@ -167,7 +167,7 @@ onUnmounted(() => {
 
     <!-- Selected Icon Display & Button -->
     <button ref="toggleButton" type="button" @click="togglePicker"
-      class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 font-bold outline-none text-neutral-900 dark:text-white hover:border-yellow-500 transition-colors flex items-center justify-between">
+      class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 font-bold outline-none text-neutral-900 dark:text-white hover:border-primary-500 transition-colors flex items-center justify-between">
       <div class="flex items-center gap-3">
         <component v-if="selectedIconComponent" :is="selectedIconComponent" :size="24" class="text-primary-600" />
         <span>{{ modelValue || 'Select an icon' }}</span>
@@ -182,7 +182,7 @@ onUnmounted(() => {
         <!-- Search Input -->
         <div class="mb-4">
           <input ref="searchInput" v-model="searchQuery" type="text" placeholder="Search icons..."
-            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-4 py-3 font-bold text-neutral-900 dark:text-white focus:border-yellow-500 transition outline-none" />
+            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-4 py-3 font-bold text-neutral-900 dark:text-white focus:border-primary-500 transition outline-none" />
         </div>
 
         <!-- Icons Grid -->
@@ -190,9 +190,9 @@ onUnmounted(() => {
           <div class="grid grid-cols-6 gap-2 px-2">
             <button v-for="iconName in filteredIcons" :key="iconName" type="button" @click="selectIcon(iconName)"
               :class="[
-                'flex flex-col items-center justify-center p-3 rounded-xl hover:bg-yellow-50 dark:hover:bg-primary-900/30 transition-colors border-2',
+                'flex flex-col items-center justify-center p-3 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors border-2',
                 modelValue === iconName
-                  ? 'bg-yellow-100 dark:bg-yellow-900/50 border-primary-500'
+                  ? 'bg-primary-100 dark:bg-primary-900/50 border-primary-500'
                   : 'border-transparent'
               ]" :title="iconName">
               <component v-if="getIconComponent(iconName)" :is="getIconComponent(iconName)" :size="24"

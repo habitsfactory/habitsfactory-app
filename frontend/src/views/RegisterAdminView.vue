@@ -96,8 +96,8 @@ onMounted(() => {
                 class="bg-white dark:bg-neutral-800 rounded-4xl p-12 shadow-2xl border border-neutral-100 dark:border-neutral-700">
                 <div class="text-center mb-8">
                     <div class="flex justify-center mb-4">
-                        <div class="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-2xl">
-                            <Shield :size="48" class="text-yellow-600 dark:text-yellow-400" />
+                        <div class="bg-primary-100 dark:bg-primary-900/30 p-4 rounded-2xl">
+                            <Shield :size="48" class="text-primary-600 dark:text-primary-400" />
                         </div>
                     </div>
                     <h1
@@ -110,15 +110,15 @@ onMounted(() => {
                 <!-- Loading state while checking admin status -->
                 <div v-if="isCheckingAdmin" class="text-center py-8">
                     <div
-                        class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-neutral-300 border-t-yellow-600">
+                        class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-neutral-300 border-t-primary-600">
                     </div>
                     <p class="mt-4 text-neutral-500 dark:text-neutral-400">Checking setup status...</p>
                 </div>
 
                 <!-- Admin registration form -->
                 <form v-else @submit.prevent="handleRegisterAdmin" class="space-y-6">
-                    <div class="bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-900/50 rounded-2xl p-4">
-                        <p class="text-yellow-700 dark:text-yellow-300 font-medium text-sm">
+                    <div class="bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-900/50 rounded-2xl p-4">
+                        <p class="text-primary-700 dark:text-primary-300 font-medium text-sm">
                             Create your administrator account to get started. This account will have full access to manage the application.
                         </p>
                     </div>
@@ -134,28 +134,28 @@ onMounted(() => {
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Username</label>
                         <input v-model="username" type="text" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter admin username" />
                     </div>
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Email</label>
                         <input v-model="email" type="email" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter admin email" />
                     </div>
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Password</label>
                         <input v-model="password1" type="password" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter password (min 8 characters)" />
                     </div>
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Confirm Password</label>
                         <input v-model="password2" type="password" required
-                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-yellow-500 transition outline-none font-bold text-neutral-900 dark:text-white"
+                            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Confirm password" />
                     </div>
 
@@ -167,7 +167,7 @@ onMounted(() => {
                             <input
                                 type="checkbox"
                                 v-model="allowRegistration"
-                                class="w-5 h-5 rounded border-2 border-neutral-300 dark:border-neutral-600 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0"
+                                class="w-5 h-5 rounded border-2 border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500 focus:ring-offset-0"
                             />
                             <div>
                                 <span class="font-bold text-neutral-900 dark:text-white">Allow User Registration</span>
@@ -177,7 +177,7 @@ onMounted(() => {
                     </div>
 
                     <button type="submit" :disabled="isLoading"
-                        class="w-full bg-yellow-600 text-white py-4 rounded-2xl font-bold hover:bg-yellow-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="w-full bg-primary-600 text-white py-4 rounded-2xl font-bold hover:bg-primary-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
                         {{ isLoading ? 'Creating Administrator...' : 'Create Administrator Account' }}
                     </button>
 
@@ -185,7 +185,7 @@ onMounted(() => {
                         <p class="text-sm text-neutral-500 dark:text-neutral-400">
                             Already have an account?
                             <router-link to="/login"
-                                class="text-yellow-600 dark:text-yellow-400 font-bold hover:underline">
+                                class="text-primary-600 dark:text-primary-400 font-bold hover:underline">
                                 Login here
                             </router-link>
                         </p>

@@ -512,13 +512,13 @@ const handleDrop = (e, targetCategoryId) => {
 
         <!-- Loading State -->
         <div v-if="isLoadingHabits" class="flex items-center justify-center py-20">
-            <RefreshCw :size="40" class="animate-spin text-yellow-500" />
+            <RefreshCw :size="40" class="animate-spin text-primary-500" />
         </div>
 
         <!-- Habit Groups -->
         <template v-else>
             <div v-for="group in groupedHabits" :key="group.id" class="space-y-4 category-group"
-                :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-yellow-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
+                :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-primary-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
                 @dragover="handleDragOver($event, group.id)" @dragenter="handleDragEnter($event, group.id)"
                 @dragleave="handleDragLeave" @drop="handleDrop($event, group.id)">
                 <!-- Group Header -->
@@ -526,7 +526,7 @@ const handleDrop = (e, targetCategoryId) => {
                     @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
                     <GripVertical :size="20"
                         class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 shrink-0" />
-                    <div class="w-2 h-6 bg-yellow-500 rounded-full shrink-0"></div>
+                    <div class="w-2 h-6 bg-primary-500 rounded-full shrink-0"></div>
                     <h3 class="text-xl font-black text-neutral-900 dark:text-white uppercase tracking-tight shrink-0">
                         {{ group.name }}
                     </h3>
@@ -560,7 +560,7 @@ const handleDrop = (e, targetCategoryId) => {
                                 </div>
                             </div>
                             <div v-if="habit.is_saving">
-                                <RefreshCw :size="20" class="animate-spin text-yellow-500" />
+                                <RefreshCw :size="20" class="animate-spin text-primary-500" />
                             </div>
                         </div>
 
@@ -596,7 +596,7 @@ const handleDrop = (e, targetCategoryId) => {
                         <div v-else-if="habit.habit_type === 'value'" class="space-y-2">
                             <input :value="habit.today_value || ''" @change="updateValue(habit, $event.target.value)"
                                 type="number" step="1" placeholder="0"
-                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-4 py-3 text-center text-2xl font-black outline-none focus:border-yellow-500 transition text-neutral-900 dark:text-white"
+                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-4 py-3 text-center text-2xl font-black outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white"
                                 :style="{ color: habit.color }" />
                             <p v-if="habit.unit" class="text-center text-sm font-bold text-neutral-400">{{ habit.unit }}
                             </p>
@@ -638,7 +638,7 @@ const handleDrop = (e, targetCategoryId) => {
                         <!-- Compact Controls -->
                         <div class="flex items-center gap-3">
                             <!-- Loading -->
-                            <RefreshCw v-if="habit.is_saving" :size="16" class="animate-spin text-yellow-500" />
+                            <RefreshCw v-if="habit.is_saving" :size="16" class="animate-spin text-primary-500" />
 
                             <!-- Boolean -->
                             <button v-if="habit.habit_type === 'boolean'" @click="toggleBoolean(habit)" :class="[
@@ -669,7 +669,7 @@ const handleDrop = (e, targetCategoryId) => {
                             <!-- Value -->
                             <input v-else-if="habit.habit_type === 'value'" :value="habit.today_value || ''"
                                 @change="updateValue(habit, $event.target.value)" type="number" step="1" placeholder="0"
-                                class="w-24 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-yellow-500 transition text-neutral-900 dark:text-white" />
+                                class="w-24 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
 
                             <!-- Rating -->
                             <div v-else-if="habit.habit_type === 'rating'" class="flex gap-0.5">

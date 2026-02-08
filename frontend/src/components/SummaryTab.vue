@@ -262,19 +262,19 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="bg-linear-to-r from-yellow-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
+    <div class="bg-linear-to-r from-primary-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
       <div class="flex justify-between items-center mb-2">
         <div>
           <h2 class="text-3xl font-black text-white mb-2">{{ t('summaryView') }}</h2>
-          <p class="text-yellow-100 font-medium">{{ t('retrospectiveAnalysis') }}</p>
+          <p class="text-primary-100 font-medium">{{ t('retrospectiveAnalysis') }}</p>
           <!-- Date Range Selector -->
           <div class="pt-2 flex flex-wrap gap-2">
             <button v-for="option in dateRangeOptions" :key="option.key" @click="onRangeChange(option.key)"
               :title="option.tooltip" :class="[
                 'rounded-xl font-bold text-sm transition-all',
                 selectedRange === option.key
-                  ? 'bg-white text-yellow-600 shadow-lg'
-                  : 'bg-yellow-700/50 text-yellow-100 hover:bg-yellow-700'
+                  ? 'bg-white text-primary-600 shadow-lg'
+                  : 'bg-primary-700/50 text-primary-100 hover:bg-primary-700'
               ]">
               {{ option.label }}
             </button>
@@ -284,7 +284,7 @@ onMounted(() => {
 
         <div class="text-right">
           <p class="text-5xl font-black text-white">{{ summaryDays }}</p>
-          <p class="text-yellow-100 font-bold uppercase tracking-wide">{{ t('days') }}</p>
+          <p class="text-primary-100 font-bold uppercase tracking-wide">{{ t('days') }}</p>
         </div>
       </div>
     </div>
@@ -298,7 +298,7 @@ onMounted(() => {
     <div v-else class="space-y-6">
       <!-- Category Groups -->
       <div v-for="group in groupedHabits" :key="group.id" class="space-y-4 category-group"
-        :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-yellow-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
+        :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-primary-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
         @dragover="handleDragOver($event, group.id)" @dragenter="handleDragEnter($event, group.id)"
         @dragleave="handleDragLeave" @drop="handleDrop($event, group.id)">
 
@@ -307,7 +307,7 @@ onMounted(() => {
           @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
           <GripVertical :size="20"
             class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 shrink-0" />
-          <div class="w-2 h-6 bg-yellow-500 rounded-full shrink-0"></div>
+          <div class="w-2 h-6 bg-primary-500 rounded-full shrink-0"></div>
           <h3 class="text-xl font-black text-neutral-900 dark:text-white uppercase tracking-tight shrink-0">
             {{ group.name }}
           </h3>
