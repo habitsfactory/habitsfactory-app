@@ -2,6 +2,9 @@
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import * as LucideIcons from 'lucide-vue-next'
 import { ChevronDown } from 'lucide-vue-next'
+import { useLanguage } from '@/composables/useLanguage'
+
+const { t } = useLanguage()
 
 const props = defineProps({
   modelValue: {
@@ -181,7 +184,7 @@ onUnmounted(() => {
         class="fixed z-9999 bg-white dark:bg-neutral-800 border-2 border-neutral-200 dark:border-neutral-700 rounded-3xl p-6 shadow-2xl max-h-96 overflow-hidden flex flex-col animate-in fade-in duration-200">
         <!-- Search Input -->
         <div class="mb-4">
-          <input ref="searchInput" v-model="searchQuery" type="text" placeholder="Search icons..."
+          <input ref="searchInput" v-model="searchQuery" type="text" :placeholder="t('searchIcons')"
             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-4 py-3 font-bold text-neutral-900 dark:text-white focus:border-primary-500 transition outline-none" />
         </div>
 

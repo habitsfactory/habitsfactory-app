@@ -135,6 +135,8 @@ export const translations = {
     archived: 'Archived',
     noArchivedHabits: 'No archived habits yet.',
     yourHabits: 'Your Habits',
+    habitNamePlaceholder: 'e.g., "Morning Run", "Read Books", "Meditate"',
+    searchIcons: 'Search icons...',
 
     // Date Navigation
     today: 'Today',
@@ -405,6 +407,8 @@ export const translations = {
     archived: 'Archivé',
     noArchivedHabits: 'Aucune habitude archivée.',
     yourHabits: 'Vos Habitudes',
+    habitNamePlaceholder: 'ex: "Course matinale", "Lire des livres", "Méditer"',
+    searchIcons: 'Rechercher des icônes...',
 
     // Date Navigation
     today: 'Aujourd\'hui',

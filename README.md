@@ -154,6 +154,7 @@ Habits Factory uses **multiple correlation algorithms** to discover meaningful r
 ## 🛣️ Roadmap
 
 Planned milestones include:
+- 🤖 Support interface with tiny language models like Qwen2.0-0.5B or Llama3.2-1B
 - 🔄 Advanced streak logic
 - 🧠 Insight-driven recommendations
 - 🎯 Goals setting and tracking

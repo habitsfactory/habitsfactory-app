@@ -328,7 +328,7 @@ onUnmounted(() => {
               <label class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
                 t('objectiveName')
               }}</label>
-              <input v-model="newHabitName" type="text" placeholder="e.g. Daily Sprints" required
+              <input v-model="newHabitName" type="text" :placeholder="t('habitNamePlaceholder')" required
                 class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white">
             </div>
 
