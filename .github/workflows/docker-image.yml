@@ -3,21 +3,58 @@ name: Docker Image CI
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
 
   build-backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v4
-    - name: Build backend Docker image
-      run: docker build ./backend --file ./backend/Dockerfile --tag habitsfactory-backend:$(date +%s)
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/habitsfactory/habitsfactory-app-backend:latest
+          ${{ env.REGISTRY }}/habitsfactory/habitsfactory-app-backend:${{ github.sha }}
 
   build-frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v4
-    - name: Build frontend Docker image
-      run: docker build ./frontend --file ./frontend/Dockerfile --tag habitsfactory-frontend:$(date +%s)
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/habitsfactory/habitsfactory-app-frontend:latest
+          ${{ env.REGISTRY }}/habitsfactory/habitsfactory-app-frontend:${{ github.sha }}
