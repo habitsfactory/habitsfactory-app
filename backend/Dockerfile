@@ -18,6 +18,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Ensure logs appear immediately in docker logs
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
@@ -34,18 +38,15 @@ ENV PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages
 # Copy application code
 COPY . .
 
-# Create staticfiles and log directories
-RUN mkdir -p /app/staticfiles /var/log/django
-
-# Collect static files (won't have much initially, but structure is there)
-RUN python manage.py collectstatic --noinput --settings=app.settings.production || true
+# Create staticfiles and media directories
+RUN mkdir -p /app/staticfiles /app/media
 
 # Set ownership and switch to non-root user
-RUN chown -R appuser:appuser /app /home/appuser/.local /var/log/django
+RUN chown -R appuser:appuser /app /home/appuser/.local
 USER appuser
 
 # Expose port
 EXPOSE 8000
 
-# Run Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app.wsgi:application"]
+# Run Gunicorn (workers overridden by docker-compose command)
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app.wsgi:application"]

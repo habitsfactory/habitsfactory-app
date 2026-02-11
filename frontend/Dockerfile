@@ -23,8 +23,15 @@ WORKDIR /app
 # Install serve to run the built app
 RUN npm install -g serve
 
+# Create non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
+
+# Set ownership and switch to non-root user
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 5173
 

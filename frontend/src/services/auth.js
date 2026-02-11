@@ -1,7 +1,7 @@
 // src/services/auth.js
 import axios from 'axios'
 
-const API_URL = 'http://127.0.0.1:8000/api/auth/'
+const API_URL = '/api/auth/'
 
 class AuthService {
     async login(email, password) {

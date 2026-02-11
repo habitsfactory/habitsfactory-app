@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:16-alpine
@@ -10,13 +8,12 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - habitsfactory_network
 
@@ -28,14 +25,13 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: app.settings.production
       SECRET_KEY: ${SECRET_KEY}
-      DEBUG: "False"
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      APP_URL: ${APP_URL:-http://localhost}
       DB_NAME: ${DB_NAME:-habitsfactory}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_HOST: db
       DB_PORT: 5432
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+      TZ: ${TZ:-UTC}
     volumes:
       - ./backend/staticfiles:/app/staticfiles
       - ./backend/media:/app/media
@@ -47,9 +43,11 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile - app.wsgi:application"
+             gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --timeout 120 --access-logfile - --error-logfile - app.wsgi:application"
+    restart: unless-stopped
     networks:
       - habitsfactory_network
+
   frontend:
     build:
       context: ./frontend
@@ -57,10 +55,9 @@ services:
     container_name: habitsfactory_frontend
     ports:
       - "5173:5173"
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost}
     depends_on:
       - backend
+    restart: unless-stopped
     networks:
       - habitsfactory_network
 
@@ -76,6 +73,7 @@ services:
       ofelia.job-exec.compute-correlations.schedule: "0 0 2 * * *"
       ofelia.job-exec.compute-correlations.container: "habitsfactory_backend"
       ofelia.job-exec.compute-correlations.command: "python manage.py compute_correlations"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
