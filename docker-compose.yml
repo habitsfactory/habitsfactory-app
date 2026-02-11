@@ -18,9 +18,7 @@ services:
       - habitsfactory_network
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/habitsfactory/habitsfactory-app-backend:${TAG:-latest}
     container_name: habitsfactory_backend
     environment:
       DJANGO_SETTINGS_MODULE: app.settings.production
@@ -33,8 +31,8 @@ services:
       DB_PORT: 5432
       TZ: ${TZ:-UTC}
     volumes:
-      - ./backend/staticfiles:/app/staticfiles
-      - ./backend/media:/app/media
+      - staticfiles:/app/staticfiles
+      - media:/app/media
     ports:
       - "8000:8000"
     depends_on:
@@ -49,12 +47,10 @@ services:
       - habitsfactory_network
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/habitsfactory/habitsfactory-app-frontend:${TAG:-latest}
     container_name: habitsfactory_frontend
     ports:
-      - "5173:5173"
+      - "80:80"
     depends_on:
       - backend
     restart: unless-stopped
@@ -77,6 +73,8 @@ services:
 
 volumes:
   postgres_data:
+  staticfiles:
+  media:
 
 networks:
   habitsfactory_network:
