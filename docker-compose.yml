@@ -9,13 +9,30 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-habitsfactory}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    networks:
-      - habitsfactory_network
+
+  migrate:
+    image: ghcr.io/habitsfactory/habitsfactory-app-backend:${TAG:-latest}
+    container_name: habitsfactory_migrate
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.production
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: ${DB_NAME:-habitsfactory}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput"
+    restart: "no"
 
   backend:
     image: ghcr.io/habitsfactory/habitsfactory-app-backend:${TAG:-latest}
@@ -38,24 +55,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --timeout 120 --access-logfile - --error-logfile - app.wsgi:application"
+      gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --timeout 120 --access-logfile - --error-logfile - app.wsgi:application
     restart: unless-stopped
-    networks:
-      - habitsfactory_network
 
   frontend:
     image: ghcr.io/habitsfactory/habitsfactory-app-frontend:${TAG:-latest}
     container_name: habitsfactory_frontend
     ports:
-      - "80:5173"
+      - "8084:5173"
     depends_on:
       - backend
     restart: unless-stopped
-    networks:
-      - habitsfactory_network
 
   scheduler:
     image: mcuadros/ofelia:latest
@@ -75,7 +88,3 @@ volumes:
   postgres_data:
   staticfiles:
   media:
-
-networks:
-  habitsfactory_network:
-    driver: bridge
