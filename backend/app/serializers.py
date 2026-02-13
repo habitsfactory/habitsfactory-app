@@ -8,10 +8,12 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ["id", "name", "order"]
 
+
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
         fields = ["id", "name", "color"]
+
 
 class HabitSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
@@ -45,6 +47,7 @@ class HabitSerializer(serializers.ModelSerializer):
             "tag_ids",
             "icon",
             "color",
+            "unit",
             "max_value",
             "today_value",
             "archived",

@@ -109,7 +109,7 @@ onMounted(() => {
                         <div class="flex items-center gap-3 mb-3">
                             <AlertCircle :size="24" class="text-red-600 dark:text-red-400" />
                             <h3 class="font-black text-red-900 dark:text-red-400 text-lg">{{ t('registrationDisabled')
-                                }}</h3>
+                            }}</h3>
                         </div>
                         <p class="text-red-700 dark:text-red-300 font-medium">
                             {{ t('registrationDisabledMessage') }}
@@ -139,7 +139,7 @@ onMounted(() => {
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('email')
-                            }}</label>
+                        }}</label>
                         <input v-model="email" type="email" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter email" />
@@ -154,7 +154,8 @@ onMounted(() => {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('confirmPassword') }}</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
+                            t('confirmPassword') }}</label>
                         <input v-model="password2" type="password" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Confirm password" />

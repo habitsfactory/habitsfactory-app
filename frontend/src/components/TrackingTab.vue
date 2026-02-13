@@ -548,9 +548,6 @@ const handleDrop = (e, targetCategoryId) => {
                             </div>
                             <div class="flex-1">
                                 <h4 class="font-black text-neutral-900 dark:text-white text-lg">{{ habit.name }}</h4>
-                                <p v-if="habit.unit" class="text-xs font-bold text-neutral-400 uppercase tracking-wide">
-                                    {{ habit.unit }}
-                                </p>
                                 <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
                                     <span v-for="tag in habit.tags" :key="tag.id"
                                         class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
@@ -580,26 +577,28 @@ const handleDrop = (e, targetCategoryId) => {
                         <!-- Counter Habit -->
                         <div v-else-if="habit.habit_type === 'counter'" class="flex items-center justify-center gap-4">
                             <button @click="decrementCounter(habit)"
-                                class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all active:scale-95">
+                                class="p-4 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
                                 <Minus :size="20" class="text-neutral-600 dark:text-neutral-300" />
                             </button>
                             <span class="text-4xl font-black" :style="{ color: habit.color }">
                                 {{ habit.today_value || 0 }}
                             </span>
                             <button @click="incrementCounter(habit)"
-                                class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all active:scale-95">
+                                class="p-4 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
                                 <Plus :size="20" class="text-neutral-600 dark:text-neutral-300" />
                             </button>
+                            <span v-if="habit.unit" class="text-lg font-bold" :style="{ color: habit.color }">{{
+                                habit.unit }}</span>
                         </div>
 
                         <!-- Value Habit -->
-                        <div v-else-if="habit.habit_type === 'value'" class="space-y-2">
+                        <div v-else-if="habit.habit_type === 'value'" class="flex items-center gap-3">
                             <input :value="habit.today_value || ''" @change="updateValue(habit, $event.target.value)"
                                 type="number" step="1" placeholder="0"
-                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-4 py-3 text-center text-2xl font-black outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white"
+                                class="flex-1 bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 hover:border-neutral-300 dark:hover:border-neutral-500 rounded-2xl py-3 text-center text-2xl font-black outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white"
                                 :style="{ color: habit.color }" />
-                            <p v-if="habit.unit" class="text-center text-sm font-bold text-neutral-400">{{ habit.unit }}
-                            </p>
+                            <span v-if="habit.unit" class="text-lg font-bold" :style="{ color: habit.color }">{{
+                                habit.unit }}</span>
                         </div>
 
                         <!-- Rating Habit -->
@@ -654,22 +653,29 @@ const handleDrop = (e, targetCategoryId) => {
                             <!-- Counter -->
                             <template v-else-if="habit.habit_type === 'counter'">
                                 <button @click="decrementCounter(habit)"
-                                    class="p-2 rounded-lg bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all">
-                                    <Minus :size="16" />
+                                    class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
+                                    <Minus :size="18" />
                                 </button>
                                 <span class="text-xl font-black min-w-12 text-center" :style="{ color: habit.color }">
                                     {{ habit.today_value || 0 }}
                                 </span>
                                 <button @click="incrementCounter(habit)"
-                                    class="p-2 rounded-lg bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all">
-                                    <Plus :size="16" />
+                                    class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
+                                    <Plus :size="18" />
                                 </button>
+                                <span v-if="habit.unit" class="text-sm font-bold" :style="{ color: habit.color }">{{
+                                    habit.unit }}</span>
                             </template>
 
                             <!-- Value -->
-                            <input v-else-if="habit.habit_type === 'value'" :value="habit.today_value || ''"
-                                @change="updateValue(habit, $event.target.value)" type="number" step="1" placeholder="0"
-                                class="w-24 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
+                            <template v-else-if="habit.habit_type === 'value'">
+                                <input :value="habit.today_value || ''"
+                                    @change="updateValue(habit, $event.target.value)" type="number" step="1"
+                                    placeholder="0"
+                                    class="w-28 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 hover:border-neutral-300 dark:hover:border-neutral-500 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
+                                <span v-if="habit.unit" class="text-sm font-bold" :style="{ color: habit.color }">{{
+                                    habit.unit }}</span>
+                            </template>
 
                             <!-- Rating -->
                             <div v-else-if="habit.habit_type === 'rating'" class="flex gap-0.5">
