@@ -20,7 +20,6 @@ export function useHabits() {
                 is_saving: false
             }))
         } catch (err) {
-            console.error("Failed to fetch habits:", err)
         } finally {
             isLoadingHabits.value = false
         }
@@ -33,7 +32,6 @@ export function useHabits() {
             })
             archivedHabits.value = res.data
         } catch (err) {
-            console.error('Failed to fetch archived habits:', err)
         }
     }
 
@@ -48,7 +46,6 @@ export function useHabits() {
             })
             return res.data
         } catch (err) {
-            console.error("Error creating habit:", err)
             throw err
         }
     }
@@ -59,7 +56,6 @@ export function useHabits() {
             habits.value = habits.value.filter(h => h.id !== habitId)
             await fetchArchivedHabits()
         } catch (err) {
-            console.error('Failed to archive habit:', err)
             throw err
         }
     }
@@ -69,7 +65,6 @@ export function useHabits() {
             await api.post(`habits/${habitId}/unarchive/`)
             archivedHabits.value = archivedHabits.value.filter(h => h.id !== habitId)
         } catch (err) {
-            console.error('Failed to unarchive habit:', err)
             throw err
         }
     }
@@ -82,7 +77,6 @@ export function useHabits() {
                 habits.value[habitIndex] = { ...habits.value[habitIndex], ...payload }
             }
         } catch (err) {
-            console.error('Failed to update habit:', err)
             throw err
         }
     }
@@ -97,7 +91,6 @@ export function useHabits() {
             habit.today_value = value
             habit.is_completed_today = value > 0
         } catch (err) {
-            console.error("Logging failed:", err)
             throw err
         } finally {
             setTimeout(() => { habit.is_saving = false }, 500)
@@ -118,7 +111,6 @@ export function useHabits() {
                 await api.delete(`habits/${habitId}/`)
                 habits.value = habits.value.filter(h => h.id !== habitId)
             } catch (err) {
-                console.error('Failed to delete habit:', err)
                 throw err
             }
         },
@@ -127,7 +119,6 @@ export function useHabits() {
                 await api.delete(`habits/${habitId}/`)
                 archivedHabits.value = archivedHabits.value.filter(h => h.id !== habitId)
             } catch (err) {
-                console.error('Failed to delete habit:', err)
                 throw err
             }
         },

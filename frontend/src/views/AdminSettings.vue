@@ -35,7 +35,6 @@ const fetchUserInfo = async () => {
         const res = await api.get('auth/user/')
         userInfo.value = res.data
     } catch (err) {
-        console.error('Failed to fetch user info:', err)
     }
 }
 
@@ -46,7 +45,6 @@ const fetchInviteLinks = async () => {
         const res = await api.get('invite-links/')
         inviteLinks.value = res.data
     } catch (err) {
-        console.error('Failed to fetch invite links:', err)
     } finally {
         isLoadingLinks.value = false
     }
@@ -59,7 +57,6 @@ const createInviteLink = async () => {
         await api.post('invite-links/')
         await fetchInviteLinks()
     } catch (err) {
-        console.error('Failed to create invite link:', err)
     } finally {
         isCreatingLink.value = false
     }
@@ -71,7 +68,6 @@ const deleteInviteLink = async (id) => {
         await api.delete(`invite-links/${id}/`)
         await fetchInviteLinks()
     } catch (err) {
-        console.error('Failed to delete invite link:', err)
     }
 }
 

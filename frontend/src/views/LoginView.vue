@@ -65,7 +65,6 @@ const handleLogin = async () => {
         await authService.login(email.value, password.value)
         router.push('/dashboard')
     } catch (error) {
-        console.error('Login error:', error)
         errorMessage.value = error.response?.data?.non_field_errors?.[0] || t('invalidCredentials')
     } finally {
         loading.value = false

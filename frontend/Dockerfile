@@ -15,25 +15,15 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage - use lightweight server
-FROM node:20-alpine
+# Production stage - nginx proxies /api/ to the backend internally
+FROM nginx:alpine
 
-WORKDIR /app
+# Copy built SPA
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Install serve to run the built app
-RUN npm install -g serve
+# Copy nginx config (proxies /api/ to backend:8000 over Docker network)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Create non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+EXPOSE 80
 
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-
-# Set ownership and switch to non-root user
-RUN chown -R appuser:appgroup /app
-USER appuser
-
-EXPOSE 5173
-
-# Serve the app
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["nginx", "-g", "daemon off;"]

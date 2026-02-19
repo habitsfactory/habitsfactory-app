@@ -169,7 +169,6 @@ const setAllDataRange = async () => {
       graphEndDate.value = new Date().toISOString().split('T')[0]
     }
   } catch (err) {
-    console.error('Failed to fetch date range:', err)
     // Fallback on error
     graphStartDate.value = '2020-01-01'
     graphEndDate.value = new Date().toISOString().split('T')[0]
@@ -199,7 +198,6 @@ const fetchGraphData = async () => {
 
     await renderCharts()
   } catch (err) {
-    console.error('Failed to fetch graph data:', err)
   } finally {
     isLoading.value = false
   }
@@ -337,7 +335,6 @@ const renderCharts = async () => {
         }
       })
     } catch (e) {
-      console.error(`Failed to create chart for ${type}:`, e)
     }
   })
 }

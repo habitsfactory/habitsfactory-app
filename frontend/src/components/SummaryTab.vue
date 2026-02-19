@@ -237,7 +237,6 @@ const fetchSummaryData = async () => {
       rating: response.data.rating || []
     }
   } catch (err) {
-    console.error('Failed to fetch summary data:', err)
   } finally {
     isFetchingSummary.value = false
   }

@@ -25,7 +25,6 @@ const checkAdminExists = async () => {
             router.push('/register')
         }
     } catch (err) {
-        console.error('Failed to check admin status:', err)
     } finally {
         isCheckingAdmin.value = false
     }

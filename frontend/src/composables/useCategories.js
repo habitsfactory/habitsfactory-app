@@ -17,7 +17,6 @@ export function useCategories() {
             })
             categoryOrder.value = [...categories.value.map(c => c.id), 'uncategorized']
         } catch (err) {
-            console.error("Failed to fetch categories:", err)
         }
     }
 
@@ -30,7 +29,6 @@ export function useCategories() {
             })
             await fetchCategories()
         } catch (err) {
-            console.error('Failed to add category:', err)
             throw err
         } finally {
             isSavingCategory.value = false
@@ -43,7 +41,6 @@ export function useCategories() {
             await api.delete(`categories/${categoryId}/`)
             await fetchCategories()
         } catch (err) {
-            console.error('Failed to delete category:', err)
             throw err
         } finally {
             isDeletingCategory.value = null
@@ -54,7 +51,6 @@ export function useCategories() {
         try {
             await api.patch(`categories/${categoryId}/`, { name })
         } catch (err) {
-            console.error('Failed to update category:', err)
             throw err
         }
     }
@@ -67,7 +63,6 @@ export function useCategories() {
                 .map((id, index) => ({ id, order: index }))
             await api.post('categories/update_layout/', { layout: layoutData })
         } catch (err) {
-            console.error('Failed to save layout:', err)
         }
     }
 

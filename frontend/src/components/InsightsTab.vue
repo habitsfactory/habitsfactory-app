@@ -23,7 +23,6 @@ const fetchInsightsData = async () => {
         })
         insightsData.value = response.data.insights || []
     } catch (err) {
-        console.error('Failed to fetch insights:', err)
         insightsData.value = []
     } finally {
         isFetchingInsights.value = false

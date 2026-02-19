@@ -103,7 +103,6 @@ const addTagToHabit = async (habitId, tagId) => {
         await fetchHabits(new Date().toISOString().split('T')[0])
         closeTagSearch()
     } catch (err) {
-        console.error('Failed to add tag to habit:', err)
     }
 }
 
@@ -118,7 +117,6 @@ const removeTagFromHabit = async (habitId, tagId) => {
         await updateHabit(habitId, { tag_ids: newTagIds })
         await fetchHabits(new Date().toISOString().split('T')[0])
     } catch (err) {
-        console.error('Failed to remove tag from habit:', err)
     }
 }
 
@@ -129,7 +127,6 @@ const fetchUserInfo = async () => {
         userInfo.value = response.data
         profileEmail.value = response.data.email
     } catch (err) {
-        console.error('Failed to fetch user info:', err)
     }
 }
 
@@ -141,7 +138,6 @@ const updateProfile = async () => {
         profileSaved.value = true
         setTimeout(() => { profileSaved.value = false }, 3000)
     } catch (err) {
-        console.error('Failed to update profile:', err)
     } finally {
         isSavingProfile.value = false
     }
@@ -276,7 +272,6 @@ const saveEditHabit = async () => {
         await fetchHabits(new Date().toISOString().split('T')[0])
         await fetchArchivedHabits()
     } catch (err) {
-        console.error('Failed to update habit:', err)
     } finally {
         isSavingHabit.value = false
     }

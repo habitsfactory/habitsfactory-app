@@ -39,7 +39,6 @@ const validateInvite = async () => {
             inviteError.value = res.data.detail || t('invalidInviteLink')
         }
     } catch (err) {
-        console.error('Failed to validate invite:', err)
         inviteValid.value = false
         inviteError.value = t('invalidInviteLink')
     } finally {

@@ -85,7 +85,6 @@ const addHabit = async () => {
     newHabitMaxValue.value = 5
     isModalOpen.value = false
   } catch (err) {
-    console.error('Failed to add habit:', err)
   }
 }
 
@@ -122,7 +121,6 @@ const addHabitFromTemplate = async (template) => {
       trackingTabRef.value.refreshHabits()
     }
   } catch (err) {
-    console.error('Failed to add habit from template:', err)
   } finally {
     isAddingTemplate.value = false
   }

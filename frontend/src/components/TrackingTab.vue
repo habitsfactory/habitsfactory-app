@@ -329,7 +329,6 @@ const handleDrop = (e, targetCategoryId) => {
     e.stopPropagation()
     e.preventDefault()
 
-    console.log('Drop detected:', { draggedCategoryId: draggedCategoryId.value, targetCategoryId })
 
     if (!draggedCategoryId.value) {
         dragOverCategoryId.value = null
@@ -345,7 +344,6 @@ const handleDrop = (e, targetCategoryId) => {
     const draggedIndex = newOrder.indexOf(draggedCategoryId.value)
     const targetIndex = newOrder.indexOf(targetCategoryId)
 
-    console.log('Indices:', { draggedIndex, targetIndex, newOrderLength: newOrder.length })
 
     if (draggedIndex !== -1 && targetIndex !== -1) {
         // Remove dragged item
@@ -366,7 +364,6 @@ const handleDrop = (e, targetCategoryId) => {
         // Insert at calculated position
         newOrder.splice(insertIndex, 0, draggedCategoryId.value)
 
-        console.log('New order:', newOrder)
 
         categoryOrder.value = newOrder
         saveLayoutToServer()

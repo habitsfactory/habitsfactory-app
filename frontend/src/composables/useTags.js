@@ -12,7 +12,6 @@ export function useTags() {
             const res = await api.get('tags/')
             tags.value = res.data
         } catch (err) {
-            console.error("Failed to fetch tags:", err)
         }
     }
 
@@ -22,7 +21,6 @@ export function useTags() {
             await api.post('tags/', { name, color })
             await fetchTags()
         } catch (err) {
-            console.error('Failed to add tag:', err)
             throw err
         } finally {
             isSavingTag.value = false
@@ -35,7 +33,6 @@ export function useTags() {
             await api.delete(`tags/${tagId}/`)
             await fetchTags()
         } catch (err) {
-            console.error('Failed to delete tag:', err)
             throw err
         } finally {
             isDeletingTag.value = null
@@ -47,7 +44,6 @@ export function useTags() {
             await api.patch(`tags/${tagId}/`, data)
             await fetchTags()
         } catch (err) {
-            console.error('Failed to update tag:', err)
             throw err
         }
     }

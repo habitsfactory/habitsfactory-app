@@ -63,7 +63,7 @@ services:
     image: ghcr.io/habitsfactory/habitsfactory-app-frontend:${TAG:-latest}
     container_name: habitsfactory_frontend
     ports:
-      - "8084:5173"
+      - "8084:80"
     depends_on:
       - backend
     restart: unless-stopped

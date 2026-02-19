@@ -51,7 +51,6 @@ const setAllExportDataRange = async () => {
             exportEndDate.value = response.data.end_date
         }
     } catch (err) {
-        console.error('Failed to fetch date range:', err)
         // Fallback: set to a wide range
         exportStartDate.value = '2020-01-01'
         exportEndDate.value = new Date().toISOString().split('T')[0]
@@ -91,7 +90,6 @@ const exportToCSV = async () => {
         link.click()
         document.body.removeChild(link)
     } catch (err) {
-        console.error('Failed to export data:', err)
         alert('Failed to export data. Please try again.')
     } finally {
         isExporting.value = false
