@@ -52,8 +52,8 @@ const newHabitMaxValue = ref(5)
 // --- LOGIC ---
 // --- LOGIC ---
 
-const handleLogout = () => {
-  authService.logout()
+const handleLogout = async () => {
+  await authService.logout()
   router.push('/login')
 }
 

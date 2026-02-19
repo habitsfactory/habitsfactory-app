@@ -109,8 +109,8 @@ const goBack = () => {
     router.push('/dashboard')
 }
 
-const handleLogout = () => {
-    authService.logout()
+const handleLogout = async () => {
+    await authService.logout()
     router.push('/login')
 }
 
