@@ -1,9 +1,22 @@
 from dj_rest_auth.registration.views import RegisterView
+from dj_rest_auth.views import LoginView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
+from rest_framework.throttling import AnonRateThrottle
 from django.contrib.auth.models import User
-from .models import SiteSettings
+from django.utils import timezone
+from .models import SiteSettings, InviteLink
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    """Strict per-IP rate limit applied only to the login endpoint."""
+    scope = "login"
+
+
+class ThrottledLoginView(LoginView):
+    """Login view with a tight rate limit (5 attempts/minute per IP)."""
+    throttle_classes = [LoginRateThrottle]
 
 
 class RegisterAdminView(APIView):
@@ -18,10 +31,12 @@ class RegisterAdminView(APIView):
     def get(self, request):
         """Check if a superuser already exists."""
         superuser_exists = User.objects.filter(is_superuser=True).exists()
-        return Response({
-            "superuser_exists": superuser_exists,
-            "redirect_url": "/register" if superuser_exists else None
-        })
+        return Response(
+            {
+                "superuser_exists": superuser_exists,
+                "redirect_url": "/register" if superuser_exists else None,
+            }
+        )
 
     def post(self, request):
         """Create the initial admin superuser and configure site settings."""
@@ -30,9 +45,9 @@ class RegisterAdminView(APIView):
             return Response(
                 {
                     "detail": "An administrator already exists. Redirecting to registration.",
-                    "redirect_url": "/register"
+                    "redirect_url": "/register",
                 },
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Validate required fields
@@ -40,7 +55,6 @@ class RegisterAdminView(APIView):
         email = request.data.get("email")
         password1 = request.data.get("password1")
         password2 = request.data.get("password2")
-        allow_registration = request.data.get("allow_registration", True)
 
         errors = {}
         if not username:
@@ -67,14 +81,11 @@ class RegisterAdminView(APIView):
 
         # Create the superuser
         user = User.objects.create_superuser(
-            username=username,
-            email=email,
-            password=password1
+            username=username, email=email, password=password1
         )
 
-        # Configure site settings
+        # Initialize site settings
         settings = SiteSettings.get_settings()
-        settings.allow_registration = allow_registration
         settings.updated_by = user
         settings.save()
 
@@ -85,31 +96,56 @@ class RegisterAdminView(APIView):
                     "id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "is_superuser": user.is_superuser
+                    "is_superuser": user.is_superuser,
                 },
-                "settings": {
-                    "allow_registration": settings.allow_registration
-                }
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
 
 class CustomRegisterView(RegisterView):
     """
-    Custom registration view that checks if registration is allowed
-    in the site settings before allowing new user registration.
+    Custom registration view that requires a valid invite token.
+    Registration is only possible with a valid, non-expired, unused invite link.
     """
-    
+
     def create(self, request, *args, **kwargs):
-        # Check if registration is allowed
-        settings = SiteSettings.get_settings()
-        
-        if not settings.allow_registration:
+        # Extract invite token from request data
+        token = request.data.get("invite_token")
+
+        if not token:
             return Response(
-                {"detail": "Registration is currently disabled by the site administrator."},
-                status=status.HTTP_403_FORBIDDEN
+                {"detail": "An invite token is required to register."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
-        # If registration is allowed, proceed with normal registration
-        return super().create(request, *args, **kwargs)
+
+        try:
+            invite = InviteLink.objects.get(token=token)
+        except (InviteLink.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "Invalid invite link."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not invite.is_valid:
+            reason = "expired" if invite.is_expired else "already been used"
+            return Response(
+                {"detail": f"This invite link has {reason}."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Proceed with normal registration
+        response = super().create(request, *args, **kwargs)
+
+        # If registration was successful, mark the invite as used
+        if response.status_code in (
+            status.HTTP_201_CREATED,
+            status.HTTP_200_OK,
+            status.HTTP_204_NO_CONTENT,
+        ):
+            new_user = User.objects.get(username=request.data.get("username"))
+            invite.used_by = new_user
+            invite.used_at = timezone.now()
+            invite.save()
+
+        return response

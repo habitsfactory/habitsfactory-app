@@ -9,9 +9,11 @@ from .serializers import (
     SiteSettingsSerializer,
     HabitCorrelationSerializer,
     TagSerializer,
+    InviteLinkSerializer,
 )
 from datetime import date, datetime, timedelta
-from .models import Habit, Completion, Category, SiteSettings, Tag
+from .models import Habit, Completion, Category, SiteSettings, Tag, InviteLink
+from django.utils import timezone
 from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from .models import HabitCorrelation
@@ -471,12 +473,8 @@ class SiteSettingsViewSet(viewsets.ModelViewSet):
         """
         Allow all authenticated users to view settings,
         but only admin users can modify them.
-        check_registration is public (no auth required).
         """
-        if self.action == "check_registration":
-            # Public endpoint - no authentication required
-            permission_classes = []
-        elif self.action in ["list", "retrieve"]:
+        if self.action in ["list", "retrieve"]:
             permission_classes = [IsAuthenticated]
         else:
             permission_classes = [IsAdminUser]
@@ -529,11 +527,54 @@ class SiteSettingsViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+class InviteLinkViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing invite links. Only admin users can create/list/delete.
+    The validate action is public (used by registration page).
+    """
+
+    serializer_class = InviteLinkSerializer
+    queryset = InviteLink.objects.all()
+
+    def get_permissions(self):
+        if self.action == "validate":
+            permission_classes = []
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+    def create(self, request):
+        """Generate a new invite link (admin only)."""
+        invite = InviteLink.objects.create(
+            created_by=request.user,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+        serializer = self.get_serializer(invite)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=False, methods=["get"], permission_classes=[])
-    def check_registration(self, request):
-        """Public endpoint to check if registration is allowed - no authentication required"""
-        settings = SiteSettings.get_settings()
-        return Response({"allow_registration": settings.allow_registration})
+    def validate(self, request):
+        """
+        Public endpoint to validate an invite token.
+        Query param: ?token=<uuid>
+        """
+        token = request.query_params.get("token")
+        if not token:
+            return Response(
+                {"valid": False, "detail": "No token provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            invite = InviteLink.objects.get(token=token)
+        except (InviteLink.DoesNotExist, ValueError):
+            return Response({"valid": False, "detail": "Invalid invite link."})
+
+        if not invite.is_valid:
+            reason = "expired" if invite.is_expired else "already used"
+            return Response({"valid": False, "detail": f"Invite link is {reason}."})
+
+        return Response({"valid": True})
 
 
 @api_view(["GET"])

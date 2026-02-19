@@ -4,6 +4,7 @@ charset-normalizer==3.4.4
 dj-rest-auth==7.0.2
 Django==5.2.10
 django-allauth==65.13.1
+django-axes==7.0.1
 django-cors-headers==4.9.0
 django-crontab==0.7.1
 djangorestframework==3.16.1

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .custom_views import CustomRegisterView, RegisterAdminView
+from .custom_views import CustomRegisterView, RegisterAdminView, ThrottledLoginView
 from .views import (
     HabitViewSet,
     CategoryViewSet,
@@ -9,6 +9,7 @@ from .views import (
     UserInfoView,
     SiteSettingsViewSet,
     TagViewSet,
+    InviteLinkViewSet,
 )
 
 # Create router for API endpoints
@@ -18,6 +19,7 @@ router.register(r"categories", CategoryViewSet, basename="category")
 router.register(r"tags", TagViewSet, basename="tag")
 router.register(r"settings", SiteSettingsViewSet, basename="settings")
 router.register(r"correlations", HabitCorrelationViewSet, basename="correlation")
+router.register(r"invite-links", InviteLinkViewSet, basename="invite-link")
 
 urlpatterns = [
     # Django admin
@@ -26,6 +28,8 @@ urlpatterns = [
     path("api/", include(router.urls)),
     # User info endpoint
     path("api/auth/user/", UserInfoView.as_view(), name="user-info"),
+    # Login with rate limiting (must be before the dj_rest_auth include)
+    path("api/auth/login/", ThrottledLoginView.as_view(), name="rest_login"),
     # Authentication routes
     path("api/auth/", include("dj_rest_auth.urls")),
     # Custom registration endpoint

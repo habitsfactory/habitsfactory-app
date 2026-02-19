@@ -1,5 +1,13 @@
 from rest_framework import serializers
-from .models import Habit, Category, Completion, SiteSettings, HabitCorrelation, Tag
+from .models import (
+    Habit,
+    Category,
+    Completion,
+    SiteSettings,
+    HabitCorrelation,
+    Tag,
+    InviteLink,
+)
 from datetime import date
 
 
@@ -74,8 +82,36 @@ class HabitSerializer(serializers.ModelSerializer):
 class SiteSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSettings
-        fields = ["id", "allow_registration", "updated_at", "updated_by"]
+        fields = ["id", "updated_at", "updated_by"]
         read_only_fields = ["id", "updated_at", "updated_by"]
+
+
+class InviteLinkSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(
+        source="created_by.username", read_only=True
+    )
+    used_by_username = serializers.CharField(
+        source="used_by.username", read_only=True, default=None
+    )
+    is_expired = serializers.BooleanField(read_only=True)
+    is_used = serializers.BooleanField(read_only=True)
+    is_valid = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = InviteLink
+        fields = [
+            "id",
+            "token",
+            "created_by_username",
+            "created_at",
+            "expires_at",
+            "used_by_username",
+            "used_at",
+            "is_expired",
+            "is_used",
+            "is_valid",
+        ]
+        read_only_fields = fields
 
 
 # Lightweight serializer for habit info in correlations

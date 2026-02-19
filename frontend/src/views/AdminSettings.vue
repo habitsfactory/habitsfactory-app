@@ -1,11 +1,14 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import authService from '@/services/auth'
 import { useDarkMode } from '@/composables/useDarkMode'
 import { useLanguage } from '@/composables/useLanguage'
-import { ArrowLeft, Save, Moon, Sun, Settings, RefreshCw, CheckCircle2 } from 'lucide-vue-next'
+import {
+    ArrowLeft, Plus, Trash2, Copy, Check,
+    Link, Clock, AlertCircle, CheckCircle2, RefreshCw
+} from 'lucide-vue-next'
 import SiteFooter from '@/components/SiteFooter.vue'
 
 const router = useRouter()
@@ -19,11 +22,12 @@ const userInfo = ref({
     is_staff: false,
     is_superuser: false
 })
-const siteSettings = ref({
-    allow_registration: true
-})
-const isSavingSettings = ref(false)
-const settingsSaved = ref(false)
+
+// Invite links state
+const inviteLinks = ref([])
+const isLoadingLinks = ref(false)
+const isCreatingLink = ref(false)
+const copiedToken = ref(null)
 
 // Fetch user info
 const fetchUserInfo = async () => {
@@ -35,62 +39,74 @@ const fetchUserInfo = async () => {
     }
 }
 
-// Fetch site settings
-const fetchSiteSettings = async () => {
+// Fetch invite links
+const fetchInviteLinks = async () => {
+    isLoadingLinks.value = true
     try {
-        const res = await api.get('settings/')
-        siteSettings.value = res.data
+        const res = await api.get('invite-links/')
+        inviteLinks.value = res.data
     } catch (err) {
-        console.error('Failed to fetch site settings:', err)
+        console.error('Failed to fetch invite links:', err)
+    } finally {
+        isLoadingLinks.value = false
     }
 }
 
-// Update site settings
-const updateSiteSettings = async () => {
-    isSavingSettings.value = true
-    const startTime = Date.now()
-
+// Create invite link
+const createInviteLink = async () => {
+    isCreatingLink.value = true
     try {
-        const response = await api.post('settings/update_settings/', {
-            allow_registration: siteSettings.value.allow_registration
-        })
-        console.log('Settings updated successfully:', response.data)
-
-        // Ensure spinner shows for at least 500ms for better UX
-        const elapsedTime = Date.now() - startTime
-        const remainingTime = Math.max(0, 500 - elapsedTime)
-
-        await new Promise(resolve => setTimeout(resolve, remainingTime))
-
-        // Set saved state to true
-        settingsSaved.value = true
-
-        // Refresh settings
-        await fetchSiteSettings()
-
-        // Hide saved message after 3 seconds
-        setTimeout(() => {
-            settingsSaved.value = false
-        }, 3000)
+        await api.post('invite-links/')
+        await fetchInviteLinks()
     } catch (err) {
-        console.error('Failed to update site settings:', err)
-        console.error('Error status:', err.response?.status)
-        console.error('Error data:', err.response?.data)
-        console.error('Request config:', err.config)
-
-        // More specific error messages
-        if (err.response?.status === 403) {
-            alert('Permission denied. Only admin users can modify site settings.')
-        } else if (err.response?.status === 404) {
-            alert('Settings endpoint not found. Please check your API configuration.')
-        } else if (err.response?.data?.detail) {
-            alert(`Error: ${err.response.data.detail}`)
-        } else {
-            alert('Failed to update site settings. Please check console for details.')
-        }
+        console.error('Failed to create invite link:', err)
     } finally {
-        isSavingSettings.value = false
+        isCreatingLink.value = false
     }
+}
+
+// Delete invite link
+const deleteInviteLink = async (id) => {
+    try {
+        await api.delete(`invite-links/${id}/`)
+        await fetchInviteLinks()
+    } catch (err) {
+        console.error('Failed to delete invite link:', err)
+    }
+}
+
+// Copy invite link to clipboard
+const copyInviteLink = async (token) => {
+    const url = `${window.location.origin}/register?invite=${token}`
+    await navigator.clipboard.writeText(url)
+    copiedToken.value = token
+    setTimeout(() => {
+        copiedToken.value = null
+    }, 2000)
+}
+
+// Computed: separate active and expired/used links
+const activeLinks = computed(() =>
+    inviteLinks.value.filter(link => link.is_valid)
+)
+const inactiveLinks = computed(() =>
+    inviteLinks.value.filter(link => !link.is_valid)
+)
+
+// Time remaining helper
+const timeRemaining = (expiresAt) => {
+    const now = new Date()
+    const expires = new Date(expiresAt)
+    const diff = expires - now
+    if (diff <= 0) return t('expired')
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return `${hours}h ${minutes}m`
+}
+
+// Build invite URL for display
+const inviteUrl = (token) => {
+    return `${window.location.origin}/register?invite=${token}`
 }
 
 const goBack = () => {
@@ -102,14 +118,9 @@ const handleLogout = () => {
     router.push('/login')
 }
 
-// Watch for changes to settings to reset saved state
-watch(siteSettings, () => {
-    settingsSaved.value = false
-}, { deep: true })
-
 onMounted(() => {
     fetchUserInfo()
-    fetchSiteSettings()
+    fetchInviteLinks()
 })
 </script>
 
@@ -134,53 +145,96 @@ onMounted(() => {
 
             <div class="space-y-6">
 
-                <!-- Site-Wide Settings (Admin Only) -->
+                <!-- Invite Links Management (Admin Only) -->
                 <div v-if="userInfo.is_staff || userInfo.is_superuser"
                     class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                    <div class="flex items-center gap-3 mb-6">
-                        <div class="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl">
-                            <Settings :size="24" class="text-emerald-600 dark:text-emerald-400" stroke-width="2.5" />
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl">
+                                <Link :size="24" class="text-emerald-600 dark:text-emerald-400" stroke-width="2.5" />
+                            </div>
+                            <div>
+                                <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('inviteLinks') }}
+                                </h2>
+                                <p class="text-sm text-neutral-500 dark:text-neutral-400 font-medium">
+                                    {{ t('inviteLinksDescription') }}</p>
+                            </div>
                         </div>
-                        <div class="flex-1">
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('siteWideSettings') }}</h2>
-                            <p class="text-sm text-neutral-500 dark:text-neutral-400 font-medium">{{ t('adminOnlyMessage') }}</p>
+                        <button @click="createInviteLink" :disabled="isCreatingLink"
+                            class="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <RefreshCw v-if="isCreatingLink" :size="18" class="animate-spin" />
+                            <Plus v-else :size="18" stroke-width="2.5" />
+                            {{ t('generateLink') }}
+                        </button>
+                    </div>
+
+                    <!-- Active Invite Links -->
+                    <div v-if="activeLinks.length > 0" class="space-y-3 mb-6">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-neutral-400 ml-1">
+                            {{ t('activeLinks') }}</h3>
+                        <div v-for="link in activeLinks" :key="link.id"
+                            class="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-mono font-bold text-neutral-700 dark:text-neutral-300 truncate">
+                                    {{ inviteUrl(link.token) }}
+                                </p>
+                                <div class="flex items-center gap-3 mt-1">
+                                    <span
+                                        class="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                        <Clock :size="12" /> {{ timeRemaining(link.expires_at) }}
+                                    </span>
+                                    <span class="text-xs text-neutral-400">
+                                        {{ t('createdAt') }} {{ new Date(link.created_at).toLocaleString() }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 ml-4">
+                                <button @click="copyInviteLink(link.token)"
+                                    class="p-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                                    :title="t('copyLink')">
+                                    <Check v-if="copiedToken === link.token" :size="18" class="text-emerald-600" />
+                                    <Copy v-else :size="18" class="text-neutral-500 dark:text-neutral-400" />
+                                </button>
+                                <button @click="deleteInviteLink(link.id)"
+                                    class="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                    :title="t('deleteLink')">
+                                    <Trash2 :size="18" class="text-red-500" />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="space-y-6">
-                        <!-- Registration Toggle -->
-                        <div
-                            class="flex items-center justify-between p-6 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                            <div class="flex-1">
-                                <h3 class="font-black text-neutral-900 dark:text-white text-lg mb-1">{{ t('userRegistration') }}
-                                </h3>
-                                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                                    {{ t('userRegistrationMessage') }}
-                                </p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer ml-4">
-                                <input type="checkbox" v-model="siteSettings.allow_registration" class="sr-only peer">
-                                <div
-                                    class="w-14 h-7 bg-neutral-300 dark:bg-neutral-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 dark:peer-focus:ring-emerald-800 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-1 after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-neutral-600 peer-checked:bg-emerald-600">
-                                </div>
-                                <span class="ml-3 text-sm font-bold text-neutral-900 dark:text-white">
-                                    {{ siteSettings.allow_registration ? t('enabled') : t('disabled') }}
-                                </span>
-                            </label>
-                        </div>
+                    <!-- Empty state for active links -->
+                    <div v-else-if="!isLoadingLinks"
+                        class="p-6 bg-neutral-50 dark:bg-neutral-700 rounded-2xl text-center mb-6">
+                        <p class="text-neutral-500 dark:text-neutral-400 font-medium">{{ t('noActiveLinks') }}</p>
+                    </div>
 
-                        <!-- Save Button -->
-                        <button @click="updateSiteSettings" :disabled="isSavingSettings || settingsSaved" :class="[
-                            'w-full px-8 py-4 rounded-2xl font-bold transition-all shadow-md active:scale-95 disabled:cursor-not-allowed flex items-center justify-center gap-2',
-                            settingsSaved
-                                ? 'bg-green-600 text-white'
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
-                        ]">
-                            <RefreshCw v-if="isSavingSettings" :size="20" class="animate-spin" />
-                            <CheckCircle2 v-else-if="settingsSaved" :size="20" stroke-width="2.5" />
-                            <Save v-else :size="20" stroke-width="2.5" />
-                            {{ isSavingSettings ? t('saving') : settingsSaved ? t('siteSettingsSaved') : t('saveSiteSettings') }}
-                        </button>
+                    <!-- Expired/Used Links -->
+                    <div v-if="inactiveLinks.length > 0" class="space-y-3">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-neutral-400 ml-1">
+                            {{ t('expiredUsedLinks') }}</h3>
+                        <div v-for="link in inactiveLinks" :key="link.id"
+                            class="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl opacity-60">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-mono text-neutral-500 dark:text-neutral-400 truncate">
+                                    {{ link.token }}
+                                </p>
+                                <div class="flex items-center gap-3 mt-1">
+                                    <span v-if="link.is_used" class="flex items-center gap-1 text-xs text-blue-500">
+                                        <CheckCircle2 :size="12" /> {{ t('usedBy') }} {{ link.used_by_username }}
+                                    </span>
+                                    <span v-else class="flex items-center gap-1 text-xs text-red-500">
+                                        <AlertCircle :size="12" /> {{ t('expired') }}
+                                    </span>
+                                </div>
+                            </div>
+                            <button @click="deleteInviteLink(link.id)"
+                                class="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors ml-4"
+                                :title="t('deleteLink')">
+                                <Trash2 :size="18" class="text-red-500" />
+                            </button>
+                        </div>
                     </div>
                 </div>
 

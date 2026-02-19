@@ -49,6 +49,14 @@ SECURE_CONTENT_SECURITY_POLICY = {
     "default-src": ("'self'",),
 }
 
+# HSTS - tells browsers to only use HTTPS for this domain
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# Override JWT_AUTH_HTTPONLY for production: tokens not readable by JavaScript
+REST_AUTH["JWT_AUTH_HTTPONLY"] = True
+
 # CORS settings for production
 CORS_ALLOWED_ORIGINS = [
     origin.strip()

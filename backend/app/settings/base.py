@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "dj_rest_auth.registration",
+    "axes",
 ]
 
 MIDDLEWARE = [
@@ -51,6 +52,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "axes.middleware.AxesMiddleware",
 ]
 
 ROOT_URLCONF = "app.urls"
@@ -100,6 +102,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Allauth settings
 AUTHENTICATION_BACKENDS = [
+    # AxesStandaloneBackend must be first to handle lockout checks
+    "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
@@ -133,7 +137,23 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/hour",
+        "user": "2000/day",
+        "login": "5/minute",
+    },
 }
+
+# django-axes: account lockout after repeated failed login attempts
+AXES_FAILURE_LIMIT = 5           # lock after 5 consecutive failures
+AXES_COOLOFF_TIME = 1            # auto-unlock after 1 hour
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+AXES_RESET_ON_SUCCESS = True     # reset failure count on successful login
+AXES_ENABLE_ADMIN = True         # show lockout records in Django admin
 REST_AUTH = {
     "USE_JWT": True,
     "JWT_AUTH_HTTPONLY": False,

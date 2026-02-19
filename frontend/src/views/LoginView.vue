@@ -20,7 +20,7 @@
 
                 <div class="space-y-2">
                     <label class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('email')
-                        }}</label>
+                    }}</label>
                     <input v-model="email" type="email" required :placeholder="t('emailPlaceholder')"
                         class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
                 </div>
@@ -37,14 +37,6 @@
                     {{ loading ? t('signingIn') : t('signIn') }}
                 </button>
 
-                <div class="text-center">
-                    <p class="text-neutral-400 text-sm">
-                        {{ t('noAccount') }}
-                        <router-link to="/register" class="text-primary-600 font-bold hover:text-primary-700">
-                            {{ t('signUp') }}
-                        </router-link>
-                    </p>
-                </div>
             </form>
         </div>
     </div>

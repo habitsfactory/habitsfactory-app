@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '@/services/api'
 import { AlertCircle } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useLanguage()
 
 const username = ref('')
@@ -14,28 +15,43 @@ const password1 = ref('')
 const password2 = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
-const registrationAllowed = ref(true)
-const isCheckingSettings = ref(true)
+const inviteToken = ref('')
+const inviteValid = ref(false)
+const isValidatingInvite = ref(true)
+const inviteError = ref('')
 
-// Check if registration is allowed
-const checkRegistrationStatus = async () => {
+// Validate the invite token from URL query parameter
+const validateInvite = async () => {
+    const token = route.query.invite
+    if (!token) {
+        inviteValid.value = false
+        inviteError.value = t('noInviteToken')
+        isValidatingInvite.value = false
+        return
+    }
+
+    inviteToken.value = token
+
     try {
-        const res = await api.get('settings/check_registration/')
-        registrationAllowed.value = res.data.allow_registration
+        const res = await api.get(`invite-links/validate/?token=${token}`)
+        inviteValid.value = res.data.valid
+        if (!res.data.valid) {
+            inviteError.value = res.data.detail || t('invalidInviteLink')
+        }
     } catch (err) {
-        console.error('Failed to check registration status:', err)
-        // If we can't check, allow registration by default
-        registrationAllowed.value = true
+        console.error('Failed to validate invite:', err)
+        inviteValid.value = false
+        inviteError.value = t('invalidInviteLink')
     } finally {
-        isCheckingSettings.value = false
+        isValidatingInvite.value = false
     }
 }
 
 const handleRegister = async () => {
     errorMessage.value = ''
 
-    if (!registrationAllowed.value) {
-        errorMessage.value = 'Registration is currently disabled.'
+    if (!inviteValid.value) {
+        errorMessage.value = t('invalidInviteLink')
         return
     }
 
@@ -51,7 +67,8 @@ const handleRegister = async () => {
             username: username.value,
             email: email.value,
             password1: password1.value,
-            password2: password2.value
+            password2: password2.value,
+            invite_token: inviteToken.value
         })
         router.push('/login')
     } catch (err) {
@@ -77,7 +94,7 @@ const handleRegister = async () => {
 }
 
 onMounted(() => {
-    checkRegistrationStatus()
+    validateInvite()
 })
 </script>
 
@@ -94,25 +111,25 @@ onMounted(() => {
                     <p class="text-neutral-500 dark:text-neutral-400 font-medium">{{ t('createAccount') }}</p>
                 </div>
 
-                <!-- Loading state while checking registration status -->
-                <div v-if="isCheckingSettings" class="text-center py-8">
+                <!-- Loading state while validating invite -->
+                <div v-if="isValidatingInvite" class="text-center py-8">
                     <div
                         class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-neutral-300 border-t-primary-600">
                     </div>
-                    <p class="mt-4 text-neutral-500 dark:text-neutral-400">{{ t('checkRegistrationStatus') }}</p>
+                    <p class="mt-4 text-neutral-500 dark:text-neutral-400">{{ t('validatingInvite') }}</p>
                 </div>
 
-                <!-- Registration disabled message -->
-                <div v-else-if="!registrationAllowed" class="space-y-6">
+                <!-- Invalid invite message -->
+                <div v-else-if="!inviteValid" class="space-y-6">
                     <div
                         class="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900/50 rounded-2xl p-6">
                         <div class="flex items-center gap-3 mb-3">
                             <AlertCircle :size="24" class="text-red-600 dark:text-red-400" />
-                            <h3 class="font-black text-red-900 dark:text-red-400 text-lg">{{ t('registrationDisabled')
-                            }}</h3>
+                            <h3 class="font-black text-red-900 dark:text-red-400 text-lg">{{ t('invalidInvite') }}
+                            </h3>
                         </div>
                         <p class="text-red-700 dark:text-red-300 font-medium">
-                            {{ t('registrationDisabledMessage') }}
+                            {{ inviteError }}
                         </p>
                     </div>
 
@@ -139,7 +156,7 @@ onMounted(() => {
 
                     <div class="space-y-2">
                         <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('email')
-                        }}</label>
+                            }}</label>
                         <input v-model="email" type="email" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter email" />

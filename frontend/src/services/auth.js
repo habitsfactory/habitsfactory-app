@@ -33,12 +33,13 @@ class AuthService {
         localStorage.removeItem('user')
     }
 
-    async register(username, email, password1, password2) {
+    async register(username, email, password1, password2, inviteToken) {
         const response = await axios.post(API_URL + 'registration/', {
             username,
             email,
             password1,
-            password2
+            password2,
+            invite_token: inviteToken
         })
 
         console.log('Registration response:', response.data)

@@ -12,7 +12,6 @@ const username = ref('')
 const email = ref('')
 const password1 = ref('')
 const password2 = ref('')
-const allowRegistration = ref(true)
 const errorMessage = ref('')
 const isLoading = ref(false)
 const isCheckingAdmin = ref(true)
@@ -52,8 +51,7 @@ const handleRegisterAdmin = async () => {
             username: username.value,
             email: email.value,
             password1: password1.value,
-            password2: password2.value,
-            allow_registration: allowRegistration.value
+            password2: password2.value
         })
         router.push('/login')
     } catch (err) {
@@ -117,9 +115,11 @@ onMounted(() => {
 
                 <!-- Admin registration form -->
                 <form v-else @submit.prevent="handleRegisterAdmin" class="space-y-6">
-                    <div class="bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-900/50 rounded-2xl p-4">
+                    <div
+                        class="bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-900/50 rounded-2xl p-4">
                         <p class="text-primary-700 dark:text-primary-300 font-medium text-sm">
-                            Create your administrator account to get started. This account will have full access to manage the application.
+                            Create your administrator account to get started. This account will have full access to
+                            manage the application.
                         </p>
                     </div>
 
@@ -132,7 +132,8 @@ onMounted(() => {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Username</label>
+                        <label
+                            class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Username</label>
                         <input v-model="username" type="text" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter admin username" />
@@ -146,34 +147,19 @@ onMounted(() => {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Password</label>
+                        <label
+                            class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Password</label>
                         <input v-model="password1" type="password" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Enter password (min 8 characters)" />
                     </div>
 
                     <div class="space-y-2">
-                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Confirm Password</label>
+                        <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">Confirm
+                            Password</label>
                         <input v-model="password2" type="password" required
                             class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white"
                             placeholder="Confirm password" />
-                    </div>
-
-                    <!-- Site Settings Section -->
-                    <div class="border-t-2 border-neutral-100 dark:border-neutral-700 pt-6">
-                        <h3 class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2 mb-4">Site Settings</h3>
-
-                        <label class="flex items-center gap-4 cursor-pointer p-4 bg-neutral-50 dark:bg-neutral-700/50 rounded-2xl">
-                            <input
-                                type="checkbox"
-                                v-model="allowRegistration"
-                                class="w-5 h-5 rounded border-2 border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500 focus:ring-offset-0"
-                            />
-                            <div>
-                                <span class="font-bold text-neutral-900 dark:text-white">Allow User Registration</span>
-                                <p class="text-sm text-neutral-500 dark:text-neutral-400">Enable new users to create accounts on the site</p>
-                            </div>
-                        </label>
                     </div>
 
                     <button type="submit" :disabled="isLoading"
