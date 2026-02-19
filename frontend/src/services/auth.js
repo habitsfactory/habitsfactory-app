@@ -5,32 +5,28 @@ const API_URL = '/api/auth/'
 
 class AuthService {
     async login(email, password) {
+        // Tokens are stored as HttpOnly cookies by the server — never in JS.
         const response = await axios.post(API_URL + 'login/', {
             email,
             password
-        })
+        }, { withCredentials: true })
 
-        console.log('Login response:', response.data)
-
-        // dj-rest-auth returns: { access, refresh, user }
-        // or { access_token, refresh_token, user }
-        // Handle both formats
-        const accessToken = response.data.access || response.data.access_token
-        const refreshToken = response.data.refresh || response.data.refresh_token
-
-        if (accessToken) {
-            localStorage.setItem('access_token', accessToken)
-            localStorage.setItem('refresh_token', refreshToken)
-            localStorage.setItem('user', JSON.stringify(response.data.user))
+        // Store only non-sensitive user profile info
+        if (response.data.user) {
+            sessionStorage.setItem('user', JSON.stringify(response.data.user))
         }
 
         return response.data
     }
 
-    logout() {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user')
+    async logout() {
+        try {
+            // Blacklist the refresh token on the server
+            await axios.post(API_URL + 'logout/', {}, { withCredentials: true })
+        } catch {
+            // Best-effort: always clear local state even if the request fails
+        }
+        sessionStorage.removeItem('user')
     }
 
     async register(username, email, password1, password2, inviteToken) {
@@ -40,55 +36,29 @@ class AuthService {
             password1,
             password2,
             invite_token: inviteToken
-        })
+        }, { withCredentials: true })
 
-        console.log('Registration response:', response.data)
-
-        // Handle tokens if they're returned on registration
-        const accessToken = response.data.access || response.data.access_token
-        const refreshToken = response.data.refresh || response.data.refresh_token
-
-        if (accessToken) {
-            localStorage.setItem('access_token', accessToken)
-            localStorage.setItem('refresh_token', refreshToken)
-            if (response.data.user) {
-                localStorage.setItem('user', JSON.stringify(response.data.user))
-            }
+        if (response.data.user) {
+            sessionStorage.setItem('user', JSON.stringify(response.data.user))
         }
 
         return response.data
     }
 
     getCurrentUser() {
-        const user = localStorage.getItem('user')
+        const user = sessionStorage.getItem('user')
         return user ? JSON.parse(user) : null
     }
 
-    getAccessToken() {
-        return localStorage.getItem('access_token')
-    }
-
-    getRefreshToken() {
-        return localStorage.getItem('refresh_token')
+    isAuthenticated() {
+        // Client-side indicator only — actual auth is enforced server-side via HttpOnly cookies.
+        return !!this.getCurrentUser()
     }
 
     async refreshToken() {
-        const refresh = this.getRefreshToken()
-
-        if (!refresh) {
-            throw new Error('No refresh token available')
-        }
-
-        const response = await axios.post(API_URL + 'token/refresh/', {
-            refresh
-        })
-
-        if (response.data.access) {
-            localStorage.setItem('access_token', response.data.access)
-            return response.data.access
-        }
-
-        return null
+        // The browser sends the HttpOnly refresh cookie automatically.
+        // The server responds by setting a new access cookie.
+        await axios.post(API_URL + 'token/refresh/', {}, { withCredentials: true })
     }
 }
 

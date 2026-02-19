@@ -65,7 +65,7 @@ const router = createRouter({
 
 // Navigation guard
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = !!authService.getAccessToken()
+  const isAuthenticated = authService.isAuthenticated()
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next('/login')

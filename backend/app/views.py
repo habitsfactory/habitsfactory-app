@@ -516,7 +516,7 @@ class SiteSettingsViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(settings)
         return Response(serializer.data)
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], permission_classes=[IsAdminUser])
     def update_settings(self, request):
         """Update the settings via custom action"""
         settings = SiteSettings.get_settings()

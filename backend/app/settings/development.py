@@ -27,6 +27,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+CORS_ALLOW_CREDENTIALS = True  # Required for HttpOnly cookie auth across dev ports
 
 # Update JWT signing key with SECRET_KEY
 SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY

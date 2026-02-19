@@ -50,8 +50,6 @@ services:
     volumes:
       - staticfiles:/app/staticfiles
       - media:/app/media
-    ports:
-      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -71,17 +69,28 @@ services:
     restart: unless-stopped
 
   scheduler:
-    image: mcuadros/ofelia:latest
+    # Runs the correlation job once on startup, then every 24 hours.
+    image: ghcr.io/habitsfactory/habitsfactory-app-backend:${TAG:-latest}
     container_name: habitsfactory_scheduler
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings.production
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: ${DB_NAME:-habitsfactory}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      TZ: ${TZ:-UTC}
     depends_on:
-      - backend
-    command: daemon --docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    labels:
-      ofelia.job-exec.compute-correlations.schedule: "0 0 2 * * *"
-      ofelia.job-exec.compute-correlations.container: "habitsfactory_backend"
-      ofelia.job-exec.compute-correlations.command: "python manage.py compute_correlations"
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: >
+      sh -c "while true; do
+        python manage.py compute_correlations;
+        sleep 86400;
+      done"
     restart: unless-stopped
 
 volumes:
