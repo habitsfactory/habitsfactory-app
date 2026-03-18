@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
 from .serializers import (
     HabitSerializer,
@@ -16,7 +16,6 @@ from datetime import date, datetime, timedelta
 from .models import Habit, Completion, Category, SiteSettings, Tag, InviteLink
 from django.utils import timezone
 from django.db.models import Q
-from rest_framework.decorators import api_view, permission_classes
 from .models import HabitCorrelation
 
 
@@ -914,3 +913,9 @@ class HabitCorrelationViewSet(viewsets.ReadOnlyModelViewSet):
                 "habit_id": int(habit_id),
             }
         )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health_check(request):
+    return Response({"status": "ok"})

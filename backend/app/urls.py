@@ -10,6 +10,7 @@ from .views import (
     SiteSettingsViewSet,
     TagViewSet,
     InviteLinkViewSet,
+    health_check,
 )
 
 # Create router for API endpoints
@@ -22,6 +23,8 @@ router.register(r"correlations", HabitCorrelationViewSet, basename="correlation"
 router.register(r"invite-links", InviteLinkViewSet, basename="invite-link")
 
 urlpatterns = [
+    # Health check endpoint (unauthenticated)
+    path("api/health/", health_check, name="health-check"),
     # Django admin
     path("admin/", admin.site.urls),
     # API routes (habits, categories, tags, correlations, etc.)
