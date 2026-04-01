@@ -4,6 +4,9 @@ export const en = {
     tagline: 'Daily evolution, quantified.',
     newHabit: 'Habit',
     logout: 'Logout',
+    darkMode: 'Dark Mode',
+    lightMode: 'Light Mode',
+    language: 'Language',
 
     // Tabs
     tracking: 'Tracking',
@@ -271,4 +274,15 @@ export const en = {
     templateNoImpulseBuying: 'No Impulse Buying',
     templateSaveMoney: 'Save Money',
     templateReviewBudget: 'Review Budget',
+
+    // Delete All Data
+    dangerZone: 'Danger Zone',
+    deleteAllData: 'Delete All Habit Data',
+    deleteAllDataDescription: 'Permanently delete all your habits, categories, tags, and completion records. This action cannot be undone.',
+    confirmDeleteAllData: 'Are you absolutely sure you want to delete ALL your habit data? This includes:\n\n• All habits (active and archived)\n• All completion records\n• All categories\n• All tags\n• All correlations\n\nThis action CANNOT be undone. Type "DELETE" to confirm:',
+    deleteAllDataSuccess: 'All habit data has been permanently deleted.',
+    deleteAllDataFailed: 'Failed to delete data. Please try again.',
+    deletingAllData: 'Deleting all data...',
+    typeDeleteToConfirm: 'Type DELETE to confirm',
+    confirmationMismatch: 'Confirmation text does not match',
 }

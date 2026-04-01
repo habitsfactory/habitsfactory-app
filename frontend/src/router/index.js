@@ -6,6 +6,7 @@ import DashboardView from '@/views/DashboardView.vue'
 import AdminSettings from '@/views/AdminSettings.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import ExportView from '@/views/ExportView.vue'
+import ImportView from '@/views/ImportView.vue'
 import authService from '@/services/auth'
 
 const router = createRouter({
@@ -54,6 +55,12 @@ const router = createRouter({
       path: '/export',
       name: 'export',
       component: ExportView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/import',
+      name: 'import',
+      component: ImportView,
       meta: { requiresAuth: true }
     },
     {

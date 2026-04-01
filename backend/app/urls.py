@@ -7,6 +7,7 @@ from .views import (
     CategoryViewSet,
     HabitCorrelationViewSet,
     UserInfoView,
+    DeleteAllUserDataView,
     SiteSettingsViewSet,
     TagViewSet,
     InviteLinkViewSet,
@@ -28,6 +29,8 @@ urlpatterns = [
     path("api/", include(router.urls)),
     # User info endpoint
     path("api/auth/user/", UserInfoView.as_view(), name="user-info"),
+    # Delete all user data endpoint
+    path("api/auth/delete-all-data/", DeleteAllUserDataView.as_view(), name="delete-all-data"),
     # Login with rate limiting (must be before the dj_rest_auth include)
     path("api/auth/login/", ThrottledLoginView.as_view(), name="rest_login"),
     # Authentication routes

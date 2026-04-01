@@ -4,7 +4,7 @@ import { useLanguage } from '@/composables/useLanguage'
 import { useHabits } from '@/composables/useHabits'
 import { useCategories } from '@/composables/useCategories'
 import { useTags } from '@/composables/useTags'
-import { User, ArrowLeft, Lock, Save, RefreshCw, Plus, Trash2, Pencil, X, Check, ArchiveRestore, Archive, CheckCircle2, FolderOpen, Calendar, Tags } from 'lucide-vue-next'
+import { User, ArrowLeft, Lock, Save, RefreshCw, Plus, Trash2, Pencil, X, Check, ArchiveRestore, Archive, CheckCircle2, FolderOpen, Calendar, Tags, AlertTriangle } from 'lucide-vue-next'
 import * as LucideIcons from 'lucide-vue-next'
 import IconPicker from '@/components/IconPicker.vue'
 import { useRouter } from 'vue-router'
@@ -321,6 +321,49 @@ const handleClickOutside = (event) => {
         if (!dropdown || !dropdown.contains(event.target)) {
             closeTagSearch()
         }
+    }
+}
+
+// Delete all data
+const showDeleteAllDataModal = ref(false)
+const deleteConfirmationText = ref('')
+const isDeletingAllData = ref(false)
+const deleteAllDataError = ref('')
+
+const openDeleteAllDataModal = () => {
+    showDeleteAllDataModal.value = true
+    deleteConfirmationText.value = ''
+    deleteAllDataError.value = ''
+}
+
+const closeDeleteAllDataModal = () => {
+    showDeleteAllDataModal.value = false
+    deleteConfirmationText.value = ''
+    deleteAllDataError.value = ''
+}
+
+const deleteAllUserData = async () => {
+    // Check confirmation text
+    if (deleteConfirmationText.value !== 'DELETE') {
+        deleteAllDataError.value = t('confirmationMismatch')
+        return
+    }
+
+    isDeletingAllData.value = true
+    deleteAllDataError.value = ''
+
+    try {
+        const response = await api.post('auth/delete-all-data/')
+
+        // Close modal
+        closeDeleteAllDataModal()
+
+        // Refresh the page to show empty state
+        window.location.reload()
+    } catch (err) {
+        deleteAllDataError.value = err.response?.data?.message || t('deleteAllDataFailed')
+    } finally {
+        isDeletingAllData.value = false
     }
 }
 
@@ -868,6 +911,103 @@ onUnmounted(() => {
                                             </button>
                                         </div>
                                     </form>
+                                </div>
+                            </div>
+                        </Transition>
+                    </Teleport>
+
+                    <!-- Danger Zone -->
+                    <div
+                        class="bg-red-50 dark:bg-red-950/30 rounded-4xl p-8 shadow-lg border-2 border-red-200 dark:border-red-900">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="p-3 rounded-2xl bg-red-100 dark:bg-red-900">
+                                <AlertTriangle :size="24" class="text-red-600 dark:text-red-400" stroke-width="2.5" />
+                            </div>
+                            <h2 class="text-2xl font-black text-red-900 dark:text-red-300">{{ t('dangerZone') }}</h2>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div
+                                class="bg-white dark:bg-neutral-800 rounded-2xl p-6 border border-red-200 dark:border-red-900">
+                                <h3 class="font-black text-lg text-neutral-900 dark:text-white mb-2">{{
+                                    t('deleteAllData') }}</h3>
+                                <p class="text-neutral-600 dark:text-neutral-400 mb-4 font-medium">
+                                    {{ t('deleteAllDataDescription') }}
+                                </p>
+                                <button @click="openDeleteAllDataModal"
+                                    class="px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all flex items-center gap-2">
+                                    <Trash2 :size="20" />
+                                    {{ t('deleteAllData') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Delete All Data Modal -->
+                    <Teleport to="body">
+                        <Transition name="fade">
+                            <div v-if="showDeleteAllDataModal"
+                                class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div class="absolute inset-0 bg-neutral-900/80 backdrop-blur-md"
+                                    @click="closeDeleteAllDataModal"></div>
+                                <div
+                                    class="relative z-10 bg-white dark:bg-neutral-800 w-full max-w-lg rounded-4xl p-12 shadow-2xl overflow-hidden">
+                                    <div class="absolute top-0 left-0 right-0 h-2 bg-red-600"></div>
+
+                                    <div class="flex justify-between items-center mb-8">
+                                        <div class="flex items-center gap-3">
+                                            <div class="p-2 rounded-xl bg-red-100 dark:bg-red-900">
+                                                <AlertTriangle :size="24" class="text-red-600 dark:text-red-400"
+                                                    stroke-width="2.5" />
+                                            </div>
+                                            <h2 class="text-2xl font-black text-red-900 dark:text-red-300">{{
+                                                t('deleteAllData') }}
+                                            </h2>
+                                        </div>
+                                        <button @click="closeDeleteAllDataModal"
+                                            class="text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition">
+                                            <X :size="32" />
+                                        </button>
+                                    </div>
+
+                                    <div class="space-y-6">
+                                        <div
+                                            class="bg-red-50 dark:bg-red-950/50 border-2 border-red-200 dark:border-red-900 rounded-2xl p-6">
+                                            <p
+                                                class="text-neutral-800 dark:text-neutral-200 font-bold whitespace-pre-line">
+                                                {{ t('confirmDeleteAllData') }}
+                                            </p>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <label
+                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">
+                                                {{ t('typeDeleteToConfirm') }}
+                                            </label>
+                                            <input v-model="deleteConfirmationText" type="text" placeholder="DELETE"
+                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-red-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white" />
+                                        </div>
+
+                                        <div v-if="deleteAllDataError"
+                                            class="p-4 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-2xl font-bold">
+                                            {{ deleteAllDataError }}
+                                        </div>
+
+                                        <div class="flex gap-3">
+                                            <button @click="deleteAllUserData"
+                                                :disabled="isDeletingAllData || deleteConfirmationText !== 'DELETE'"
+                                                class="flex-1 bg-red-600 text-white py-4 rounded-3xl font-black hover:bg-red-700 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                                <RefreshCw v-if="isDeletingAllData" :size="20" class="animate-spin" />
+                                                <Trash2 v-else :size="20" stroke-width="2.5" />
+                                                {{ isDeletingAllData ? t('deletingAllData') : t('deleteAllData') }}
+                                            </button>
+                                            <button type="button" @click="closeDeleteAllDataModal"
+                                                :disabled="isDeletingAllData"
+                                                class="flex-1 bg-neutral-300 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300 py-4 rounded-3xl font-black hover:bg-neutral-400 dark:hover:bg-neutral-500 transition-all disabled:opacity-50">
+                                                {{ t('cancel') }}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </Transition>

@@ -4,6 +4,9 @@ export const fr = {
     tagline: 'Évolution quotidienne, quantifiée.',
     newHabit: 'Habitude',
     logout: 'Déconnexion',
+    darkMode: 'Mode sombre',
+    lightMode: 'Mode clair',
+    language: 'Langue',
 
     // Tabs
     tracking: 'Suivi',
@@ -271,4 +274,15 @@ export const fr = {
     templateNoImpulseBuying: 'Pas d\'achat impulsif',
     templateSaveMoney: 'Économiser',
     templateReviewBudget: 'Revoir le budget',
+
+    // Delete All Data
+    dangerZone: 'Zone de Danger',
+    deleteAllData: 'Supprimer Toutes les Données d\'Habitudes',
+    deleteAllDataDescription: 'Supprimer définitivement toutes vos habitudes, catégories, étiquettes et enregistrements de complétion. Cette action est irréversible.',
+    confirmDeleteAllData: 'Êtes-vous absolument sûr de vouloir supprimer TOUTES vos données d\'habitudes ? Cela inclut :\n\n• Toutes les habitudes (actives et archivées)\n• Tous les enregistrements de complétion\n• Toutes les catégories\n• Toutes les étiquettes\n• Toutes les corrélations\n\nCette action ne peut PAS être annulée. Tapez "DELETE" pour confirmer :',
+    deleteAllDataSuccess: 'Toutes les données d\'habitudes ont été définitivement supprimées.',
+    deleteAllDataFailed: 'Échec de la suppression des données. Veuillez réessayer.',
+    deletingAllData: 'Suppression de toutes les données...',
+    typeDeleteToConfirm: 'Tapez DELETE pour confirmer',
+    confirmationMismatch: 'Le texte de confirmation ne correspond pas',
 }

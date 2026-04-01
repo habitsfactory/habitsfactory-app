@@ -223,8 +223,9 @@ class HabitViewSet(viewsets.ModelViewSet):
     def export_csv(self, request):
         """
         Export habit completion data as CSV for a date range.
-        Format: First column is habit name, subsequent columns are dates (one per day).
-        Each row contains the values for that habit on each day.
+        Format: First columns are habit metadata (name, type, color, icon, category, tags, unit, max_value),
+        subsequent columns are dates (one per day).
+        Each row contains the metadata and values for that habit on each day.
         """
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
@@ -242,8 +243,8 @@ class HabitViewSet(viewsets.ModelViewSet):
                 {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
             )
 
-        # Get all habits for the user
-        habits = self.get_queryset().order_by("name")
+        # Get all habits for the user (including tags)
+        habits = self.get_queryset().prefetch_related('tags', 'category').order_by("name")
 
         # Generate list of all dates in range
         from datetime import timedelta
@@ -261,8 +262,17 @@ class HabitViewSet(viewsets.ModelViewSet):
         output = StringIO()
         writer = csv.writer(output)
 
-        # Write header row (Habit Name, Date1, Date2, ...)
-        header = ["Habit Name"] + [d.strftime("%Y-%m-%d") for d in date_list]
+        # Write header row (Metadata columns + Date columns)
+        header = [
+            "Habit Name",
+            "Type",
+            "Color",
+            "Icon",
+            "Category",
+            "Tags",
+            "Unit",
+            "Max Value"
+        ] + [d.strftime("%Y-%m-%d") for d in date_list]
         writer.writerow(header)
 
         # Write data rows
@@ -275,8 +285,25 @@ class HabitViewSet(viewsets.ModelViewSet):
             # Create a dictionary for quick lookup
             completion_dict = {c.date: float(c.value) for c in completions}
 
-            # Build row: habit name followed by values for each date
-            row = [habit.name]
+            # Prepare metadata
+            category_name = habit.category.name if habit.category else ""
+            tags_string = ":".join([tag.name for tag in habit.tags.all()])
+            unit = habit.unit if habit.unit else ""
+            max_value = habit.max_value if habit.max_value else ""
+
+            # Build row: metadata followed by values for each date
+            row = [
+                habit.name,
+                habit.habit_type,
+                habit.color,  # Already in hexadecimal format (e.g., #d97706)
+                habit.icon,
+                category_name,
+                tags_string,
+                unit,
+                max_value
+            ]
+            
+            # Add completion values for each date
             for date_item in date_list:
                 value = completion_dict.get(date_item, "")
                 row.append(value)
@@ -287,6 +314,210 @@ class HabitViewSet(viewsets.ModelViewSet):
         output.close()
 
         return Response({"csv_content": csv_content})
+
+    @action(detail=False, methods=["post"])
+    def import_csv(self, request):
+        """
+        Import habit completion data from CSV.
+        Expected format matches export_csv format:
+        - Columns 1-8: Habit Name, Type, Color, Icon, Category, Tags, Unit, Max Value
+        - Remaining columns: Dates (YYYY-MM-DD) with completion values
+        
+        Creates or updates habits and their completions.
+        """
+        csv_content = request.data.get("csv_content")
+        
+        if not csv_content:
+            return Response({"error": "csv_content is required"}, status=400)
+        
+        import csv
+        import random
+        from io import StringIO
+        
+        def generate_random_color():
+            """Generate a random hex color"""
+            return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        
+        try:
+            # Detect CSV format (French uses semicolon, English uses comma)
+            first_line = csv_content.split('\n')[0] if csv_content else ""
+            delimiter = ';' if ';' in first_line else ','
+            
+            # Parse CSV content
+            csv_file = StringIO(csv_content)
+            reader = csv.DictReader(csv_file, delimiter=delimiter)
+            
+            # Helper function to parse float values (handles both comma and dot as decimal separator)
+            def parse_float(value_str):
+                """Parse float from string, handling both French (comma) and English (dot) formats"""
+                if not value_str:
+                    return None
+                value_str = str(value_str).strip()
+                if not value_str:
+                    return None
+                # Replace comma with dot for French format
+                value_str = value_str.replace(',', '.')
+                try:
+                    return float(value_str)
+                except (ValueError, TypeError):
+                    return None
+            
+            # Track statistics
+            habits_created = 0
+            habits_updated = 0
+            completions_created = 0
+            categories_created = 0
+            tags_created = 0
+            categories_cache = {}
+            tags_cache = {}
+            
+            # Process each row (each row is a habit)
+            for row in reader:
+                # Helper function to safely get and strip string values
+                def safe_get(key, default=""):
+                    value = row.get(key, default)
+                    # Handle cases where value might be a list (duplicate headers) or None
+                    if isinstance(value, list):
+                        value = value[0] if value else default
+                    return str(value).strip() if value is not None else default
+                
+                # Extract habit metadata
+                habit_name = safe_get("Habit Name")
+                habit_type = safe_get("Type", "boolean")
+                color = safe_get("Color")
+                icon = safe_get("Icon", "calendar")
+                category_name = safe_get("Category")
+                tags_string = safe_get("Tags")
+                unit = safe_get("Unit") or None
+                max_value_str = safe_get("Max Value")
+                
+                if not habit_name:
+                    continue  # Skip rows without habit name
+                
+                # Assign random color if empty
+                if not color:
+                    color = generate_random_color()
+                
+                # Parse max_value (handles both French and English formats)
+                max_value = None
+                if max_value_str:
+                    parsed = parse_float(max_value_str)
+                    if parsed is not None:
+                        max_value = int(parsed)
+                
+                # Get or create category
+                category = None
+                if category_name:
+                    if category_name in categories_cache:
+                        category = categories_cache[category_name]
+                    else:
+                        category, created = Category.objects.get_or_create(
+                            name=category_name,
+                            user=request.user
+                        )
+                        categories_cache[category_name] = category
+                        if created:
+                            categories_created += 1
+                
+                # Get or create habit
+                habit, created = Habit.objects.get_or_create(
+                    name=habit_name,
+                    user=request.user,
+                    defaults={
+                        "habit_type": habit_type,
+                        "color": color,
+                        "icon": icon,
+                        "category": category,
+                        "unit": unit,
+                        "max_value": max_value
+                    }
+                )
+                
+                if created:
+                    habits_created += 1
+                else:
+                    # Update existing habit
+                    habit.habit_type = habit_type
+                    habit.color = color
+                    habit.icon = icon
+                    habit.category = category
+                    habit.unit = unit
+                    habit.max_value = max_value
+                    habit.save()
+                    habits_updated += 1
+                
+                # Process tags (always clear first, then add if present)
+                habit.tags.clear()
+                
+                if tags_string:
+                    tag_names = [t.strip() for t in tags_string.split(":") if t.strip()]
+                    
+                    for tag_name in tag_names:
+                        if tag_name in tags_cache:
+                            tag = tags_cache[tag_name]
+                        else:
+                            tag, created = Tag.objects.get_or_create(
+                                name=tag_name,
+                                user=request.user
+                            )
+                            tags_cache[tag_name] = tag
+                            if created:
+                                tags_created += 1
+                        
+                        habit.tags.add(tag)
+                
+                # Process completions (all remaining columns are dates)
+                for key, value in row.items():
+                    # Skip metadata columns
+                    if key in ["Habit Name", "Type", "Color", "Icon", "Category", "Tags", "Unit", "Max Value"]:
+                        continue
+                    
+                    # Handle value that might be a list
+                    if isinstance(value, list):
+                        value = value[0] if value else None
+                    
+                    # Key should be a date (YYYY-MM-DD)
+                    if not value or not str(value).strip():
+                        continue  # Skip empty values
+                    
+                    try:
+                        # Parse date from column name
+                        completion_date = datetime.strptime(key, "%Y-%m-%d").date()
+                        
+                        # Parse completion value (handles both French and English formats)
+                        completion_value = parse_float(value)
+                        
+                        if completion_value is None:
+                            continue  # Skip invalid values
+                        
+                        # Create or update completion
+                        _, created = Completion.objects.update_or_create(
+                            habit=habit,
+                            date=completion_date,
+                            defaults={"value": completion_value}
+                        )
+                        
+                        if created:
+                            completions_created += 1
+                    
+                    except (ValueError, TypeError):
+                        # Skip invalid dates or values
+                        continue
+            
+            return Response({
+                "status": "success",
+                "habits_created": habits_created,
+                "habits_updated": habits_updated,
+                "completions_created": completions_created,
+                "categories_created": categories_created,
+                "tags_created": tags_created
+            })
+        
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to parse CSV: {str(e)}"},
+                status=400
+            )
 
     @action(detail=False, methods=["get"])
     def date_range(self, request):
@@ -462,6 +693,48 @@ class UserInfoView(APIView):
                 "last_name": user.last_name,
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
+            }
+        )
+
+
+class DeleteAllUserDataView(APIView):
+    """
+    Delete all habit-related data for the current user.
+    This includes: categories, tags, habits (and their completions), and correlations.
+    Does NOT delete the user account, invite links, or site settings.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        
+        # Count items before deletion for reporting
+        categories_count = Category.objects.filter(user=user).count()
+        tags_count = Tag.objects.filter(user=user).count()
+        habits_count = Habit.objects.filter(user=user).count()
+        correlations_count = HabitCorrelation.objects.filter(user=user).count()
+        # Completions will be cascade deleted with habits
+        completions_count = Completion.objects.filter(habit__user=user).count()
+        
+        # Delete all user data
+        Category.objects.filter(user=user).delete()
+        Tag.objects.filter(user=user).delete()
+        HabitCorrelation.objects.filter(user=user).delete()
+        # Delete habits last (will cascade delete completions)
+        Habit.objects.filter(user=user).delete()
+        
+        return Response(
+            {
+                "status": "success",
+                "message": "All habit data deleted successfully",
+                "deleted": {
+                    "categories": categories_count,
+                    "tags": tags_count,
+                    "habits": habits_count,
+                    "completions": completions_count,
+                    "correlations": correlations_count,
+                }
             }
         )
 

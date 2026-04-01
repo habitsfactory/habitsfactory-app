@@ -7,7 +7,7 @@ import { useLanguage } from '@/composables/useLanguage'
 import { useHabits } from '@/composables/useHabits'
 import { useCategories } from '@/composables/useCategories'
 import * as LucideIcons from 'lucide-vue-next'
-import { Plus, X, ChevronDown, Moon, Sun, BarChart3, FileText, Calendar, Languages, Check, Brain, LogOut, Sparkles, RefreshCw, PenLine } from 'lucide-vue-next'
+import { Plus, X, ChevronDown, Moon, Sun, BarChart3, FileText, Calendar, Languages, Check, Brain, LogOut, Sparkles, RefreshCw, PenLine, User, Download, Upload } from 'lucide-vue-next'
 import IconPicker from '@/components/IconPicker.vue'
 import TrackingTab from '@/components/TrackingTab.vue'
 import InsightsTab from '@/components/InsightsTab.vue'
@@ -27,6 +27,12 @@ const isLanguageDropdownOpen = ref(false)
 
 // New habit dropdown state
 const isNewHabitDropdownOpen = ref(false)
+
+// Profile dropdown state
+const isProfileDropdownOpen = ref(false)
+
+// Language sub-dropdown state
+const isLanguageSubDropdownOpen = ref(false)
 
 // --- STATE ---
 const isModalOpen = ref(false)
@@ -91,6 +97,8 @@ const addHabit = async () => {
 const selectLanguage = (langCode) => {
   setLanguage(langCode)
   isLanguageDropdownOpen.value = false
+  isLanguageSubDropdownOpen.value = false
+  isProfileDropdownOpen.value = false
 }
 
 // Get icon component from name
@@ -138,6 +146,10 @@ const closeDropdowns = (event) => {
   }
   if (!event.target.closest('.new-habit-dropdown-container')) {
     isNewHabitDropdownOpen.value = false
+  }
+  if (!event.target.closest('.profile-dropdown-container')) {
+    isProfileDropdownOpen.value = false
+    isLanguageSubDropdownOpen.value = false
   }
 }
 
@@ -204,41 +216,92 @@ onUnmounted(() => {
           </div>
 
           <!-- Language Selector -->
-          <div class="relative language-dropdown-container">
-            <button @click="isLanguageDropdownOpen = !isLanguageDropdownOpen"
+          <div class="relative profile-dropdown-container">
+            <button @click="isProfileDropdownOpen = !isProfileDropdownOpen"
               class="bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all shadow-md active:scale-95">
-              <Languages :size="20" stroke-width="2.5" />
-              <span class="text-xl">{{ currentLanguageInfo.flag }}</span>
-              <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isLanguageDropdownOpen }"
+              <User :size="20" stroke-width="2.5" />
+              <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isProfileDropdownOpen }"
                 class="transition-transform" />
             </button>
 
-            <!-- Language Dropdown -->
+            <!-- Profile Dropdown -->
             <Transition name="dropdown">
-              <div v-if="isLanguageDropdownOpen"
-                class="absolute top-full mt-2 right-0 bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 py-2 min-w-50 z-50">
-                <button v-for="lang in languages" :key="lang.code" @click="selectLanguage(lang.code)"
+              <div v-if="isProfileDropdownOpen"
+                class="absolute top-full mt-2 right-0 bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 py-2 min-w-64 z-50">
+
+                <!-- Dark Mode Toggle -->
+                <button @click="toggleDarkMode"
                   class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
-                  <span class="text-xl">{{ lang.flag }}</span>
-                  <span class="font-bold text-neutral-900 dark:text-white">{{ lang.name }}</span>
-                  <Check v-if="currentLanguage === lang.code" :size="16"
-                    class="ml-auto text-primary-600 dark:text-primary-400" stroke-width="3" />
+                  <Moon v-if="!isDark" :size="20" class="text-yellow-500" stroke-width="2.5" />
+                  <Sun v-else :size="20" class="text-yellow-500" stroke-width="2.5" />
+                  <span class="font-bold text-neutral-900 dark:text-white">
+                    {{ isDark ? t('lightMode') || 'Light Mode' : t('darkMode') || 'Dark Mode' }}
+                  </span>
+                </button>
+
+                <!-- Divider -->
+                <div class="h-px bg-neutral-200 dark:bg-neutral-700 my-2"></div>
+
+                <!-- Language Selector with Sub-dropdown -->
+                <div class="relative">
+                  <button @click="isLanguageSubDropdownOpen = !isLanguageSubDropdownOpen"
+                    class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                    <Languages :size="20" class="text-neutral-500 dark:text-neutral-400" stroke-width="2.5" />
+                    <div class="flex-1">
+                      <span class="font-bold text-neutral-900 dark:text-white">{{ t('language') || 'Language' }}</span>
+                      <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-sm">{{ currentLanguageInfo.flag }}</span>
+                        <span class="text-xs text-neutral-500">{{ currentLanguageInfo.name }}</span>
+                      </div>
+                    </div>
+                    <ChevronDown :size="16" stroke-width="2.5" :class="{ 'rotate-180': isLanguageSubDropdownOpen }"
+                      class="transition-transform text-neutral-400" />
+                  </button>
+
+                  <!-- Language Sub-dropdown -->
+                  <Transition name="dropdown">
+                    <div v-if="isLanguageSubDropdownOpen"
+                      class="absolute left-0 right-0 top-full bg-neutral-50 dark:bg-neutral-750 rounded-xl mx-2 mt-1 overflow-hidden border border-neutral-200 dark:border-neutral-600">
+                      <button v-for="lang in languages" :key="lang.code" @click="selectLanguage(lang.code)"
+                        class="w-full px-4 py-2.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                        <span class="text-lg">{{ lang.flag }}</span>
+                        <span class="font-semibold text-neutral-900 dark:text-white text-sm">{{ lang.name }}</span>
+                        <Check v-if="currentLanguage === lang.code" :size="14"
+                          class="ml-auto text-primary-600 dark:text-primary-400" stroke-width="3" />
+                      </button>
+                    </div>
+                  </Transition>
+                </div>
+
+                <!-- Divider -->
+                <div class="h-px bg-neutral-200 dark:bg-neutral-700 my-2"></div>
+
+                <!-- Export Data -->
+                <button @click="goToExport(); isProfileDropdownOpen = false"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                  <Download :size="20" class="text-blue-500" stroke-width="2.5" />
+                  <span class="font-bold text-neutral-900 dark:text-white">{{ t('exportData') || 'Export Data' }}</span>
+                </button>
+
+                <!-- Import Data -->
+                <button @click="router.push('/import'); isProfileDropdownOpen = false"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left">
+                  <Upload :size="20" class="text-green-500" stroke-width="2.5" />
+                  <span class="font-bold text-neutral-900 dark:text-white">{{ t('importData') || 'Import Data' }}</span>
+                </button>
+
+                <!-- Divider -->
+                <div class="h-px bg-neutral-200 dark:bg-neutral-700 my-2"></div>
+
+                <!-- Logout -->
+                <button @click="handleLogout"
+                  class="w-full px-4 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center gap-3 text-left text-red-600">
+                  <LogOut :size="20" stroke-width="2.5" />
+                  <span class="font-bold">{{ t('logout') || 'Logout' }}</span>
                 </button>
               </div>
             </Transition>
           </div>
-
-          <!-- Dark Mode Toggle -->
-          <button @click="toggleDarkMode"
-            class="bg-neutral-200 dark:bg-neutral-800 text-yellow-500 dark:text-yellow-700 dark:text-primary-400 px-6 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-all shadow-md active:scale-95">
-            <Moon v-if="!isDark" :size="20" stroke-width="2.5" />
-            <Sun v-else :size="20" stroke-width="2.5" />
-          </button>
-
-          <button @click="handleLogout"
-            class="bg-neutral-200 text-red-600 px-6 py-4 rounded-2xl font-bold hover:bg-neutral-300 transition-all shadow-md active:scale-95 dark:bg-neutral-800 dark:hover:bg-neutral-700">
-            <LogOut :size="20" stroke-width="2.5" />
-          </button>
         </div>
       </header>
 
