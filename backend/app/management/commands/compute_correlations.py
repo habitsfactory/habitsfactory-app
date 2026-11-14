@@ -1,47 +1,121 @@
 """
-Management command to compute habit correlations for all users.
-Run this nightly using Django's task scheduler or cron.
+Management command to compute habit correlations ("insights") for all users.
+Run nightly; the Insights tab can also trigger it for one user on demand.
 
-Correlation Methods (Type-Aware):
-    - Binary × Binary: Phi Coefficient (χ² based)
-    - Binary × Continuous: Point-Biserial Correlation
-    - Continuous × Continuous: Spearman Rank Correlation (primary), Pearson (supplemental)
-    - Ordinal (rating) × Any: Spearman Rank Correlation
-    
-Additional Analyses:
-    - Lagged Cross-Correlation: Detects time-shifted relationships (e.g., exercise → next-day energy)
-    - DTW Distance: Measures pattern similarity even with time shifts or scaling differences
-    - Statistical Significance: Only correlations with p < 0.05 are stored
+How it works
+    1. Each habit becomes one value per day over the analysed window:
+       - yes/no and counter habits: a day without an entry counts as 0
+         ("not done"), from the first day the habit was ever logged;
+       - value, rating and percentage habits: a day without an entry is
+         unknown and left out (an unlogged night is not 0 hours of sleep).
+    2. Every pair of habits is compared on the days both are known, with the
+       Spearman rank correlation. It suits every mix of habit types: on two
+       yes/no habits it equals the phi coefficient, and it is not thrown off
+       by outliers or by the scale of the values.
+    3. Only pairs that are statistically solid are kept: enough days in
+       common, and a p-value that survives a Benjamini-Hochberg correction
+       across all the pairs tested (with dozens of habits there are hundreds
+       of pairs, so plain "p < 0.05" would let many flukes through).
+
+    The Pearson coefficient is stored alongside for reference.
+    Results that no longer hold are deleted on the next run.
 
 Usage:
     python manage.py compute_correlations
-    python manage.py compute_correlations --days 7
+    python manage.py compute_correlations --days 180
     python manage.py compute_correlations --user-id 1
-    python manage.py compute_correlations --days 30 --min-sample-size 10
+    python manage.py compute_correlations --min-sample-size 14 --verbose
 """
 
-from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
-from django.utils import timezone
+from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
-from collections import defaultdict
 
 import numpy as np
-from scipy.stats import spearmanr, pearsonr, kendalltau, pointbiserialr
-from ...models import Habit, Completion, HabitCorrelation
-from dtaidistance import dtw
+from django.contrib.auth.models import User
+from django.core.management.base import BaseCommand
+from django.db.models import Min
+from django.utils import timezone
+from scipy.stats import spearmanr
+
+from ...models import Completion, HabitCorrelation
+
+DEFAULT_DAYS = 90
+DEFAULT_MIN_SAMPLE_SIZE = 10
+
+# Share of reported pairs we accept to be flukes (false discovery rate)
+FALSE_DISCOVERY_RATE = 0.05
+
+# Habit types where "no entry that day" means zero rather than unknown
+ZERO_WHEN_MISSING = {"boolean", "counter"}
+
+
+def benjamini_hochberg(p_values, alpha=FALSE_DISCOVERY_RATE):
+    """Return a list of booleans: which p-values stay significant once the
+    number of tests is taken into account (Benjamini-Hochberg procedure)."""
+    count = len(p_values)
+    if count == 0:
+        return []
+    order = sorted(range(count), key=lambda index: p_values[index])
+    # Largest rank k such that p(k) <= k / m * alpha; everything up to it passes
+    cutoff = 0
+    for rank, index in enumerate(order, start=1):
+        if p_values[index] <= rank / count * alpha:
+            cutoff = rank
+    keep = [False] * count
+    for index in order[:cutoff]:
+        keep[index] = True
+    return keep
+
+
+def build_series(habit_type, values_by_date, dates, first_logged):
+    """One value per date: the logged value, 0 or NaN (see module docstring)."""
+    fill_zero = habit_type in ZERO_WHEN_MISSING
+    series = np.full(len(dates), np.nan, dtype=np.float64)
+    for position, day in enumerate(dates):
+        if day in values_by_date:
+            series[position] = values_by_date[day]
+        elif fill_zero and first_logged is not None and day >= first_logged:
+            series[position] = 0.0
+    return series
+
+
+def correlate(x, y, min_sample_size):
+    """Compare two daily series. Returns (spearman, p_value, pearson, days)
+    or None when they cannot be compared (too few common days, or one of
+    them never changes)."""
+    both_known = ~np.isnan(x) & ~np.isnan(y)
+    days = int(both_known.sum())
+    if days < min_sample_size or days < 3:
+        return None
+    x, y = x[both_known], y[both_known]
+    if np.ptp(x) == 0 or np.ptp(y) == 0:
+        return None
+
+    spearman, p_value = spearmanr(x, y)
+    if np.isnan(spearman) or np.isnan(p_value):
+        return None
+    pearson = float(np.corrcoef(x, y)[0, 1])
+    return float(spearman), float(p_value), pearson, days
+
+
+def to_decimal(value):
+    if value is None or np.isnan(value):
+        return None
+    return Decimal(str(round(max(-1.0, min(1.0, float(value))), 4)))
 
 
 class Command(BaseCommand):
     help = "Compute habit correlations for all users based on recent completion data"
 
+    verbose = False
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--days",
             type=int,
-            default=30,
-            help="Number of days to analyze (default: 30, recommended: 7-30)",
+            default=DEFAULT_DAYS,
+            help=f"Number of days to analyze (default: {DEFAULT_DAYS})",
         )
         parser.add_argument(
             "--user-id",
@@ -51,13 +125,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--min-sample-size",
             type=int,
-            default=4,
-            help="Minimum number of overlapping data points required (default: 4)",
+            default=DEFAULT_MIN_SAMPLE_SIZE,
+            help="Minimum number of days two habits must have in common "
+            f"(default: {DEFAULT_MIN_SAMPLE_SIZE})",
         )
         parser.add_argument(
             "--verbose",
             action="store_true",
-            help="Show detailed output including lagged correlations",
+            help="Show how many pairs were tested and kept",
         )
 
     def handle(self, *args, **options):
@@ -66,6 +141,7 @@ class Command(BaseCommand):
         min_sample_size = options["min_sample_size"]
         self.verbose = options.get("verbose", False)
 
+        # Up to yesterday: today is not over, so "not done yet" would count as 0
         end_date = timezone.now().date() - timedelta(days=1)
         start_date = end_date - timedelta(days=days - 1)
 
@@ -88,310 +164,88 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"✓ Computed {total} total correlations"))
 
-    # -------------------------------------------------------------------------
-    # Helper Methods
-    # -------------------------------------------------------------------------
-
-    def compute_phi_coefficient(self, x, y):
-        """Compute Phi coefficient for two binary variables."""
-        # Ensure we have binary data
-        x = x.astype(int)
-        y = y.astype(int)
-        
-        n11 = np.sum((x == 1) & (y == 1))
-        n10 = np.sum((x == 1) & (y == 0))
-        n01 = np.sum((x == 0) & (y == 1))
-        n00 = np.sum((x == 0) & (y == 0))
-        
-        # Calculate denominator components
-        row1 = n11 + n10
-        row2 = n01 + n00
-        col1 = n11 + n01
-        col2 = n10 + n00
-        
-        # Avoid division by zero
-        denominator = row1 * row2 * col1 * col2
-        if denominator == 0:
-            return 0.0
-        
-        with np.errstate(divide='ignore', invalid='ignore'):
-            phi = (n11 * n00 - n10 * n01) / np.sqrt(denominator)
-        
-        return phi if not np.isnan(phi) else 0.0
-
-    def compute_lagged_correlation(self, x, y, lag=1):
-        """Compute correlation with time lag (e.g., does x today predict y tomorrow?)."""
-        if lag >= len(x) or lag >= len(y):
-            return None
-        
-        x_lagged = x[:-lag]
-        y_shifted = y[lag:]
-        
-        valid_mask = ~np.isnan(x_lagged) & ~np.isnan(y_shifted)
-        
-        if valid_mask.sum() < 4:
-            return None
-        
-        with np.errstate(divide='ignore', invalid='ignore'):
-            corr, p_value = spearmanr(x_lagged[valid_mask], y_shifted[valid_mask])
-        
-        # Only return significant correlations
-        if p_value <= 0.05 and not np.isnan(corr):
-            return corr
-        return None
-
-    def get_habit_type_category(self, habit):
-        """Categorize habit type for correlation method selection."""
-        if habit.habit_type == 'boolean':
-            return 'binary'
-        elif habit.habit_type in ['counter', 'value', 'percentage']:
-            return 'continuous'
-        elif habit.habit_type == 'rating':
-            return 'ordinal'
-        return 'continuous'
-
-    def compute_best_correlation(self, x, y, type1, type2, overlap_mask):
-        """
-        Compute the most appropriate correlation based on variable types.
-        Returns (correlation_value, method_name, p_value)
-        """
-        x_valid = x[overlap_mask]
-        y_valid = y[overlap_mask]
-        
-        # Need at least 3 points for meaningful correlation
-        if len(x_valid) < 3:
-            return None, None, None
-        
-        # Binary vs Binary: Use Phi Coefficient
-        if type1 == 'binary' and type2 == 'binary':
-            try:
-                phi = self.compute_phi_coefficient(x_valid, y_valid)
-                if not np.isnan(phi) and abs(phi) > 0.01:  # Avoid near-zero correlations
-                    return phi, 'phi', None
-            except Exception:
-                pass
-        
-        # Binary vs Continuous: Use Point-Biserial
-        elif (type1 == 'binary' and type2 == 'continuous') or \
-             (type1 == 'continuous' and type2 == 'binary'):
-            try:
-                binary_var = x_valid if type1 == 'binary' else y_valid
-                continuous_var = y_valid if type1 == 'binary' else x_valid
-                
-                # Check if binary variable has variation
-                if len(np.unique(binary_var)) < 2:
-                    return None, None, None
-                
-                corr, p_value = pointbiserialr(binary_var, continuous_var)
-                if p_value <= 0.05 and not np.isnan(corr):
-                    return corr, 'point_biserial', p_value
-            except Exception:
-                pass
-        
-        # For all other cases, use Spearman (works with ordinal, continuous, mixed)
-        try:
-            # Check for variation in both variables
-            if len(np.unique(x_valid)) < 2 or len(np.unique(y_valid)) < 2:
-                return None, None, None
-                
-            corr, p_value = spearmanr(x_valid, y_valid)
-            if p_value <= 0.05 and not np.isnan(corr):
-                return corr, 'spearman', p_value
-        except Exception:
-            pass
-        
-        return None, None, None
-
-    # -------------------------------------------------------------------------
-    # Main Computation
-    # -------------------------------------------------------------------------
-
     def compute_user_correlations(self, user, start_date, end_date, min_sample_size):
-        """Compute all pairwise habit correlations for a user."""
+        """Recompute every pairwise correlation of a user's active habits.
+
+        Replaces the user's previous results: pairs that are no longer
+        significant are deleted. Returns the number of correlations stored.
+        """
         habits = list(user.habits.filter(archived=False).order_by("id"))
 
-        if len(habits) < 2:
-            return 0
+        values = defaultdict(dict)
+        for habit_id, day, value in Completion.objects.filter(
+            habit__in=habits, date__gte=start_date, date__lte=end_date
+        ).values_list("habit_id", "date", "value"):
+            values[habit_id][day] = float(value)
 
-        completions = Completion.objects.filter(
-            habit__user=user,
-            date__gte=start_date,
-            date__lte=end_date,
-        ).select_related("habit")
-
-        habit_data = defaultdict(dict)
-        for c in completions:
-            habit_data[c.habit_id][c.date] = float(c.value)
-
-        habit_ids = [h.id for h in habits if h.id in habit_data]
-        if len(habit_ids) < 2:
-            return 0
-
-        habit_map = {h.id: h for h in habits}
-        habit_types = {h.id: self.get_habit_type_category(h) for h in habits}
-
-        all_dates = sorted(
-            {date for values in habit_data.values() for date in values.keys()}
+        first_logged = dict(
+            Completion.objects.filter(habit__in=habits)
+            .values("habit_id")
+            .annotate(first=Min("date"))
+            .values_list("habit_id", "first")
         )
 
-        if len(all_dates) < min_sample_size:
-            return 0
+        dates = [
+            start_date + timedelta(days=offset)
+            for offset in range((end_date - start_date).days + 1)
+        ]
+        series = {
+            habit.id: build_series(
+                habit.habit_type, values[habit.id], dates, first_logged.get(habit.id)
+            )
+            for habit in habits
+            if habit.id in first_logged
+        }
+        tracked = [habit for habit in habits if habit.id in series]
 
-        num_habits = len(habit_ids)
-        num_dates = len(all_dates)
+        # 1. Compare every pair that has enough days in common
+        candidates = []
+        for index, habit1 in enumerate(tracked):
+            for habit2 in tracked[index + 1:]:
+                result = correlate(series[habit1.id], series[habit2.id], min_sample_size)
+                if result is not None:
+                    candidates.append((habit1, habit2, *result))
 
-        # Track correlation method usage for verbose output
-        method_counts = defaultdict(int)
+        # 2. Keep the pairs that survive the multiple-comparison correction
+        keep = benjamini_hochberg([candidate[3] for candidate in candidates])
+        significant = [c for c, kept in zip(candidates, keep) if kept]
 
-        # Raw matrix with NaN for missing data
-        raw = np.full((num_habits, num_dates), np.nan, dtype=np.float64)
-        
-        for i, habit_id in enumerate(habit_ids):
-            for j, date in enumerate(all_dates):
-                if date in habit_data[habit_id]:
-                    raw[i, j] = habit_data[habit_id][date]
+        if self.verbose:
+            self.stdout.write(
+                f"  {user.username}: {len(tracked)} habits, "
+                f"{len(candidates)} pairs tested, {len(significant)} kept"
+            )
 
-        # Normalized matrix (for DTW and visualization)
-        norm = np.full_like(raw, np.nan)
-        for i in range(num_habits):
-            row = raw[i]
-            mask = ~np.isnan(row)
-            if mask.sum() == 0:
-                continue
-            min_v = np.nanmin(row)
-            max_v = np.nanmax(row)
-            if max_v > min_v:
-                norm[i, mask] = (row[mask] - min_v) / (max_v - min_v)
-            else:
-                norm[i, mask] = 0.5  # Constant value maps to middle
+        # 3. Store them, replacing the previous run
+        existing = {
+            (c.habit1_id, c.habit2_id): c
+            for c in HabitCorrelation.objects.filter(user=user)
+        }
+        to_create, to_update, fresh_keys = [], [], set()
 
-        existing = HabitCorrelation.objects.filter(user=user)
-        existing_map = {(c.habit1_id, c.habit2_id): c for c in existing}
+        for habit1, habit2, spearman, _p_value, pearson, days in significant:
+            key = (habit1.id, habit2.id)
+            fresh_keys.add(key)
+            obj = existing.get(key) or HabitCorrelation(
+                user=user, habit1=habit1, habit2=habit2
+            )
+            obj.spearman_coefficient = to_decimal(spearman)
+            obj.pearson_coefficient = to_decimal(pearson)
+            obj.dtw_distance = None  # no longer computed
+            obj.sample_size = days
+            obj.start_date = start_date
+            obj.end_date = end_date
+            obj.calculated_at = timezone.now()
+            # bulk_create / bulk_update do not call save()
+            obj.max_correlation = obj._compute_max_correlation()
+            (to_update if key in existing else to_create).append(obj)
 
-        to_create = []
-        to_update = []
-
-        for i in range(num_habits):
-            for j in range(i + 1, num_habits):
-                h1_id = habit_ids[i]
-                h2_id = habit_ids[j]
-                h1 = habit_map[h1_id]
-                h2 = habit_map[h2_id]
-
-                x = raw[i]
-                y = raw[j]
-
-                overlap_mask = ~np.isnan(x) & ~np.isnan(y)
-                overlap = overlap_mask.sum()
-
-                if overlap < min_sample_size:
-                    continue
-
-                type1 = habit_types[h1_id]
-                type2 = habit_types[h2_id]
-
-                # Compute Pearson (for continuous data as baseline)
-                pearson = np.nan
-                if type1 == 'continuous' and type2 == 'continuous':
-                    with np.errstate(divide="ignore", invalid="ignore"):
-                        pearson_corr = np.corrcoef(x[overlap_mask], y[overlap_mask])[0, 1]
-                        if not np.isnan(pearson_corr):
-                            pearson = pearson_corr
-
-                # Compute best type-aware correlation
-                best_corr, method, p_value = self.compute_best_correlation(
-                    x, y, type1, type2, overlap_mask
-                )
-                
-                # Skip if no significant correlation found
-                if best_corr is None:
-                    continue
-                
-                # Track which method was used
-                method_counts[method] += 1
-
-                spearman = best_corr if method in ['spearman', 'point_biserial', 'phi'] else np.nan
-
-                # Compute lagged correlations (time-shifted relationships)
-                # Check if habit x today predicts habit y tomorrow (lag=1)
-                lag_1 = self.compute_lagged_correlation(x, y, lag=1)
-                # Reverse: does y today predict x tomorrow?
-                lag_1_reverse = self.compute_lagged_correlation(y, x, lag=1)
-                
-                # Take the stronger lagged correlation
-                max_lag = None
-                if lag_1 is not None and lag_1_reverse is not None:
-                    max_lag = lag_1 if abs(lag_1) > abs(lag_1_reverse) else -lag_1_reverse
-                elif lag_1 is not None:
-                    max_lag = lag_1
-                elif lag_1_reverse is not None:
-                    max_lag = -lag_1_reverse
-
-                # Compute DTW distance (measures similarity in pattern/shape)
-                dtw_value = None
-                try:
-                    nx = norm[i][overlap_mask]
-                    ny = norm[j][overlap_mask]
-                    if len(nx) > 1 and len(ny) > 1 and not np.any(np.isnan(nx)) and not np.any(np.isnan(ny)):
-                        dist = dtw.distance(nx, ny)
-                        # Normalize by sequence length
-                        dtw_value = dist / (len(nx) + len(ny))
-                        # Convert to similarity score (0-1, higher = more similar)
-                        dtw_value = 1.0 / (1.0 + dtw_value)
-                except Exception as e:
-                    # DTW can fail on certain data, continue without it
-                    pass
-
-                # Convert to Decimal for database storage
-                pearson_d = None if np.isnan(pearson) else Decimal(str(round(float(pearson), 4)))
-                spearman_d = None if np.isnan(spearman) else Decimal(str(round(float(spearman), 4)))
-                dtw_d = None if dtw_value is None else Decimal(str(round(float(dtw_value), 4)))
-
-                key = (h1_id, h2_id)
-                obj = existing_map.get(key)
-
-                # Note: Lagged correlation detected but not stored in current schema
-                # max_lag indicates time-shifted relationship strength
-                # Positive: h1 predicts h2, Negative: h2 predicts h1
-                if self.verbose and max_lag is not None and abs(max_lag) > 0.3:
-                    direction = f"{h1.name} → {h2.name}" if max_lag > 0 else f"{h2.name} → {h1.name}"
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"  Time-lagged: {direction}: {abs(max_lag):.3f}"
-                        )
-                    )
-
-                if obj:
-                    obj.pearson_coefficient = pearson_d
-                    obj.spearman_coefficient = spearman_d
-                    obj.dtw_distance = dtw_d
-                    obj.sample_size = overlap
-                    obj.start_date = start_date
-                    obj.end_date = end_date
-                    to_update.append(obj)
-                else:
-                    to_create.append(
-                        HabitCorrelation(
-                            user=user,
-                            habit1=h1,
-                            habit2=h2,
-                            pearson_coefficient=pearson_d,
-                            spearman_coefficient=spearman_d,
-                            dtw_distance=dtw_d,
-                            sample_size=overlap,
-                            start_date=start_date,
-                            end_date=end_date,
-                        )
-                    )
-
+        stale = [obj.pk for key, obj in existing.items() if key not in fresh_keys]
+        if stale:
+            HabitCorrelation.objects.filter(pk__in=stale).delete()
         if to_create:
-            for obj in to_create:
-                obj.max_correlation = obj._compute_max_correlation()
             HabitCorrelation.objects.bulk_create(to_create)
-
         if to_update:
-            for obj in to_update:
-                obj.max_correlation = obj._compute_max_correlation()
             HabitCorrelation.objects.bulk_update(
                 to_update,
                 [
@@ -402,13 +256,8 @@ class Command(BaseCommand):
                     "start_date",
                     "end_date",
                     "max_correlation",
+                    "calculated_at",
                 ],
             )
 
-        # Show method summary in verbose mode
-        if self.verbose and method_counts:
-            self.stdout.write("  Correlation methods used:")
-            for method, count in sorted(method_counts.items()):
-                self.stdout.write(f"    - {method}: {count}")
-
-        return len(to_create) + len(to_update)
+        return len(significant)

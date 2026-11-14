@@ -92,6 +92,7 @@ const resultRows = [
     { key: 'habits_created', label: 'habitsCreated' },
     { key: 'habits_updated', label: 'habitsUpdated' },
     { key: 'completions_created', label: 'completionsCreated' },
+    { key: 'values_skipped', label: 'valuesSkipped' },
     { key: 'categories_created', label: 'categoriesCreated' },
     { key: 'tags_created', label: 'tagsCreated' },
 ]

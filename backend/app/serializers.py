@@ -147,6 +147,7 @@ class HabitCorrelationSerializer(serializers.ModelSerializer):
     habit2 = HabitBasicSerializer(read_only=True)
     max_correlation = serializers.SerializerMethodField()
     strength = serializers.SerializerMethodField()
+    direction = serializers.CharField(read_only=True)
     description = serializers.SerializerMethodField()
 
     class Meta:
@@ -162,6 +163,7 @@ class HabitCorrelationSerializer(serializers.ModelSerializer):
             "start_date",
             "end_date",
             "strength",
+            "direction",
             "description",
         ]
         read_only_fields = fields
@@ -186,25 +188,18 @@ class HabitCorrelationSerializer(serializers.ModelSerializer):
             return "very_weak"
 
     def get_description(self, obj):
-        """Generate human-readable description of the correlation."""
-        habit1_name = obj.habit1.name
-        habit2_name = obj.habit2.name
-        coefficient = float(obj.max_correlation)
+        """Plain-English summary (the web app builds its own, translated)."""
+        first, second = obj.habit1.name, obj.habit2.name
+        strength = float(obj.max_correlation)
 
-        if coefficient > 0:
-            if coefficient >= 0.9:
-                return f"When you do {habit1_name}, you almost always do {habit2_name} too!"
-            elif coefficient >= 0.7:
-                return f"You tend to do {habit1_name} and {habit2_name} together."
-            elif coefficient >= 0.5:
-                return f"There's a moderate connection between {habit1_name} and {habit2_name}."
-            else:
-                return f"You sometimes do {habit1_name} and {habit2_name} together."
-        else:
-            abs_coef = abs(coefficient)
-            if abs_coef >= 0.7:
-                return f"You rarely do {habit1_name} and {habit2_name} on the same day."
-            elif abs_coef >= 0.5:
-                return f"When you do {habit1_name}, you tend to skip {habit2_name}."
-            else:
-                return f"There's a slight inverse relationship between {habit1_name} and {habit2_name}."
+        if obj.direction == "positive":
+            if strength >= 0.7:
+                return f"{first} and {second} go together very consistently."
+            if strength >= 0.5:
+                return f"{first} and {second} tend to go together."
+            return f"{first} and {second} go together somewhat more often than not."
+        if strength >= 0.7:
+            return f"{first} and {second} very consistently go in opposite directions."
+        if strength >= 0.5:
+            return f"When {first} is up, {second} tends to be down."
+        return f"{first} and {second} lean slightly in opposite directions."

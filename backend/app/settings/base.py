@@ -146,6 +146,8 @@ REST_FRAMEWORK = {
         "anon": "60/hour",
         "user": "2000/day",
         "login": "5/minute",
+        # Manual "recompute insights" button
+        "compute": "20/hour",
     },
 }
 

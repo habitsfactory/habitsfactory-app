@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
+from rest_framework.throttling import UserRateThrottle
 from .serializers import (
     HabitSerializer,
     CategorySerializer,
@@ -11,6 +12,8 @@ from .serializers import (
     TagSerializer,
     InviteLinkSerializer,
 )
+import math
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -19,6 +22,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Max, Q
 from rest_framework.decorators import api_view, permission_classes
 from .models import HabitCorrelation
@@ -61,6 +65,45 @@ class TagViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+DATE_HEADER_RE = re.compile(r"^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})$")
+
+
+def parse_date_headers(headers):
+    """Find the date columns of an imported CSV. Returns {header: date}.
+
+    Accepts YYYY-MM-DD (what the export writes) and the spreadsheet styles
+    DD-MM-YYYY / MM-DD-YYYY, with "-", "/" or "." as separator. Year-last
+    dates are read day-first unless the file itself proves otherwise (a
+    second number above 12 and never a first number above 12).
+    """
+    parts = {}
+    for header in headers:
+        match = DATE_HEADER_RE.match((header or "").strip())
+        if match:
+            parts[header] = tuple(int(group) for group in match.groups())
+
+    year_last = [p for p in parts.values() if p[0] <= 31]
+    month_first = any(b > 12 for _, b, _ in year_last) and not any(
+        a > 12 for a, _, _ in year_last
+    )
+
+    dates = {}
+    for header, (a, b, c) in parts.items():
+        if a > 31:
+            year, month, day = a, b, c
+        elif month_first:
+            year, month, day = c, a, b
+        else:
+            year, month, day = c, b, a
+        if year < 1900:
+            continue
+        try:
+            dates[header] = date(year, month, day)
+        except ValueError:
+            continue
+    return dates
 
 
 HABIT_TYPE_ORDER = [choice for choice, _ in Habit.TYPE_CHOICES]
@@ -426,6 +469,7 @@ class HabitViewSet(viewsets.ModelViewSet):
             # Parse CSV content
             csv_file = StringIO(csv_content)
             reader = csv.DictReader(csv_file, delimiter=delimiter)
+            date_columns = parse_date_headers(reader.fieldnames or [])
             
             # Helper function to parse float values (handles both comma and dot as decimal separator)
             def parse_float(value_str):
@@ -446,6 +490,7 @@ class HabitViewSet(viewsets.ModelViewSet):
             habits_created = 0
             habits_updated = 0
             completions_created = 0
+            values_skipped = 0
             categories_created = 0
             tags_created = 0
             categories_cache = {}
@@ -555,49 +600,52 @@ class HabitViewSet(viewsets.ModelViewSet):
                         
                         habit.tags.add(tag)
                 
-                # Process completions (all remaining columns are dates)
-                for key, value in row.items():
-                    # Skip metadata columns
-                    if key in ["Habit Name", "Type", "Color", "Icon", "Category", "Tags", "Unit", "Max Value"]:
-                        continue
-                    
+                # Process completions: one column per day. Cells that are not a
+                # number (notes, typos) are skipped and counted.
+                pending = {}
+                for key, completion_date in date_columns.items():
+                    value = row.get(key)
                     # Handle value that might be a list
                     if isinstance(value, list):
                         value = value[0] if value else None
-                    
-                    # Key should be a date (YYYY-MM-DD)
                     if not value or not str(value).strip():
                         continue  # Skip empty values
-                    
-                    try:
-                        # Parse date from column name
-                        completion_date = datetime.strptime(key, "%Y-%m-%d").date()
-                        
-                        # Parse completion value (handles both French and English formats)
-                        completion_value = parse_float(value)
-                        
-                        if completion_value is None:
-                            continue  # Skip invalid values
-                        
-                        # Create or update completion
-                        _, created = Completion.objects.update_or_create(
-                            habit=habit,
-                            date=completion_date,
-                            defaults={"value": completion_value}
-                        )
-                        
-                        if created:
-                            completions_created += 1
-                    
-                    except (ValueError, TypeError):
-                        # Skip invalid dates or values
+
+                    # Handles both French (comma) and English (dot) decimals
+                    completion_value = parse_float(value)
+                    if (
+                        completion_value is None
+                        or not math.isfinite(completion_value)
+                        or not 0 <= completion_value < 100000000
+                    ):
+                        values_skipped += 1
                         continue
-            
+                    pending[completion_date] = completion_value
+
+                if pending:
+                    already_logged = set(
+                        Completion.objects.filter(
+                            habit=habit, date__in=pending.keys()
+                        ).values_list("date", flat=True)
+                    )
+                    # One statement per habit instead of two queries per cell
+                    Completion.objects.bulk_create(
+                        [
+                            Completion(habit=habit, date=day, value=round(amount, 2))
+                            for day, amount in pending.items()
+                        ],
+                        update_conflicts=True,
+                        unique_fields=["habit", "date"],
+                        update_fields=["value"],
+                    )
+                    completions_created += len(pending.keys() - already_logged)
+
             return Response({
                 "status": "success",
                 "habits_created": habits_created,
                 "habits_updated": habits_updated,
                 "completions_created": completions_created,
+                "values_skipped": values_skipped,
                 "categories_created": categories_created,
                 "tags_created": tags_created
             })
@@ -1178,6 +1226,12 @@ def habit_insights_summary(request):
     )
 
 
+class ComputeRateThrottle(UserRateThrottle):
+    """The correlation job is CPU-heavy: limit how often a user can trigger it."""
+
+    scope = "compute"
+
+
 class HabitCorrelationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for viewing habit correlations (insights).
@@ -1191,6 +1245,52 @@ class HabitCorrelationViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = HabitCorrelationSerializer
     permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=["post"], throttle_classes=[ComputeRateThrottle])
+    def compute(self, request):
+        """
+        Recompute the current user's correlations now, instead of waiting for
+        the nightly job. Replaces the user's previous results.
+
+        Body (optional): {"days": 90}  — how far back to look (14 to 730).
+        """
+        try:
+            # Imported here: the scientific stack is only needed for this job
+            from .management.commands.compute_correlations import (
+                Command,
+                DEFAULT_DAYS,
+                DEFAULT_MIN_SAMPLE_SIZE,
+            )
+        except ImportError:
+            return Response(
+                {"error": "Correlation analysis is not available on this server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            days = int(request.data.get("days", DEFAULT_DAYS))
+        except (TypeError, ValueError):
+            days = DEFAULT_DAYS
+        days = max(14, min(days, 730))
+
+        # Same window as the nightly job: up to yesterday (today is not over)
+        end_date = timezone.now().date() - timedelta(days=1)
+        start_date = end_date - timedelta(days=days - 1)
+
+        with transaction.atomic():
+            # Also removes the pairs that no longer correlate
+            count = Command().compute_user_correlations(
+                request.user, start_date, end_date, DEFAULT_MIN_SAMPLE_SIZE
+            )
+
+        return Response(
+            {
+                "status": "computed",
+                "correlations": count,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
 
     def get_queryset(self):
         """Return correlations for the current user only."""

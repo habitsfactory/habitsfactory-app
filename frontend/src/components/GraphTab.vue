@@ -7,10 +7,11 @@ import { notifyError } from '@/composables/useToast'
 import { toISODate, parseISODate, addDays, daysBetween, presetRange, recentYears } from '@/utils/dates'
 import { Chart, registerables } from 'chart.js'
 import 'chartjs-adapter-date-fns'
-import { CalendarRange, ChartLine, LoaderCircle } from 'lucide-vue-next'
+import { CalendarRange, ChartLine, ChartNoAxesColumn, LoaderCircle } from 'lucide-vue-next'
 import CalendarHeatmap from '@/components/CalendarHeatmap.vue'
 import UiSection from '@/components/ui/UiSection.vue'
 import UiInput from '@/components/ui/UiInput.vue'
+import UiEmptyState from '@/components/ui/UiEmptyState.vue'
 import { labelClass } from '@/components/ui/styles'
 
 // Register Chart.js components
@@ -26,6 +27,7 @@ const graphStartDate = ref('')
 const graphEndDate = ref('')
 const graphData = ref(Object.fromEntries(HABIT_TYPES.map(type => [type, []])))
 const isLoading = ref(false)
+const hasLoaded = ref(false)
 
 // Chart instances and their canvases are kept out of Vue's reactivity on
 // purpose: Chart.js objects must not be wrapped in proxies.
@@ -37,6 +39,9 @@ const chartSections = computed(() => HABIT_TYPES.map(type => ({
   title: t(`${type}Habits`),
   hasData: graphData.value[type]?.length > 0,
 })))
+
+// Nothing at all was logged in the selected range
+const isEmpty = computed(() => hasLoaded.value && chartSections.value.every(section => !section.hasData))
 
 // Date range quick select options
 const dateRangeOptions = computed(() => [
@@ -125,6 +130,7 @@ const fetchGraphData = async () => {
     notifyError(err, 'loadFailed')
   } finally {
     isLoading.value = false
+    hasLoaded.value = true
   }
 }
 
@@ -322,15 +328,16 @@ onBeforeUnmount(destroyCharts)
       </section>
     </div>
 
-    <!-- One chart per habit type -->
-    <UiSection v-for="section in chartSections" :key="section.type" :title="section.title" :icon="ChartLine">
-      <!-- The canvas stays mounted so Chart.js can attach to it -->
-      <div v-show="section.hasData" class="h-80">
+    <UiEmptyState v-if="isEmpty" :icon="ChartNoAxesColumn" :title="t('noGraphData')"
+      :description="t('noGraphDataHint')" />
+
+    <!-- One chart per habit type that has entries in the range. Sections are
+         hidden rather than removed: the canvases must stay mounted for Chart.js. -->
+    <UiSection v-for="section in chartSections" v-show="section.hasData" :key="section.type" :title="section.title"
+      :icon="ChartLine">
+      <div class="h-80">
         <canvas :ref="el => { canvases[section.type] = el }"></canvas>
       </div>
-      <p v-if="!section.hasData" class="flex h-32 items-center justify-center text-sm font-medium text-ink-faint">
-        {{ t('noData') }}
-      </p>
     </UiSection>
   </div>
 </template>

@@ -21,7 +21,7 @@ import UiIconButton from '@/components/ui/UiIconButton.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiModal from '@/components/ui/UiModal.vue'
 import UiDropdown from '@/components/ui/UiDropdown.vue'
-import HabitIcon from '@/components/habits/HabitIcon.vue'
+import HabitRow from '@/components/habits/HabitRow.vue'
 import TagChip from '@/components/habits/TagChip.vue'
 import HabitFormModal from '@/components/habits/HabitFormModal.vue'
 import { inputClass, inputBaseClass, labelClass } from '@/components/ui/styles'
@@ -352,8 +352,6 @@ const deleteAllUserData = async () => {
 }
 
 const rowClass = 'flex items-center gap-2 rounded-xl bg-sunken px-3 py-2'
-const habitRowClass = 'flex items-start gap-3 rounded-xl bg-sunken p-3'
-const metaChipClass = 'rounded-full bg-line px-2 py-0.5 text-xs font-semibold text-ink-soft'
 const colorInputClass =
     'shrink-0 cursor-pointer rounded-lg border border-line bg-surface p-1 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0'
 
@@ -494,27 +492,11 @@ onMounted(() => {
         <!-- Active habits -->
         <UiSection :title="`${t('yourHabits')} (${habits.length})`" :icon="ListChecks">
             <p v-if="habits.length > 1" class="mb-3 text-sm text-ink-soft">{{ t('habitOrderHint') }}</p>
-            <TransitionGroup tag="ul" class="space-y-2" move-class="transition-transform duration-200">
-                <li v-for="(habit, index) in habits" :key="habit.id" :class="habitRowClass">
-                    <!-- Order used on the dashboard (within each category) -->
-                    <div class="-my-1 -ml-1 flex shrink-0 flex-col">
-                        <UiIconButton :icon="ChevronUp" size="sm" :label="t('moveUp')" :disabled="index === 0"
-                            @click="handleMoveHabit(habit, -1)" />
-                        <UiIconButton :icon="ChevronDown" size="sm" :label="t('moveDown')"
-                            :disabled="index === habits.length - 1" @click="handleMoveHabit(habit, 1)" />
-                    </div>
-                    <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" />
-
-                    <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-semibold text-ink">{{ habit.name }}</p>
-                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <span :class="metaChipClass">{{ t(habit.habit_type) }}</span>
-                            <span v-if="habit.category"
-                                class="rounded-full bg-primary-500/10 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
-                                {{ habit.category.name }}
-                            </span>
-                            <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" removable
-                                :remove-label="t('removeTag')" @remove="removeTagFromHabit(habit, tag.id)" />
+            <TransitionGroup tag="ul" class="divide-y divide-line border-y border-line"
+                move-class="transition-transform duration-200">
+                <HabitRow v-for="(habit, index) in habits" :key="habit.id" :habit="habit">
+                    <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" removable
+                        :remove-label="t('removeTag')" @remove="removeTagFromHabit(habit, tag.id)" />
 
                             <!-- Add tag -->
                             <UiDropdown align="left" width="w-52" @open="tagSearchQuery = ''">
@@ -549,16 +531,20 @@ onMounted(() => {
                                     </div>
                                 </template>
                             </UiDropdown>
-                        </div>
-                    </div>
 
-                    <div class="flex shrink-0 flex-col sm:flex-row">
+                    <template #actions>
+                        <!-- Order used on the dashboard (within each category) -->
+                        <UiIconButton :icon="ChevronUp" :label="t('moveUp')" :disabled="index === 0"
+                            @click="handleMoveHabit(habit, -1)" />
+                        <UiIconButton :icon="ChevronDown" :label="t('moveDown')"
+                            :disabled="index === habits.length - 1" @click="handleMoveHabit(habit, 1)" />
+                        <span class="mx-1.5 h-5 w-px bg-line"></span>
                         <UiIconButton :icon="Pencil" :label="t('editHabit')" @click="startEditHabit(habit)" />
                         <UiIconButton :icon="Archive" :label="t('archiveHabit')" @click="handleArchiveHabit(habit)" />
                         <UiIconButton :icon="Trash2" variant="danger" :label="t('deleteHabitPermanently')"
                             @click="handleDeleteHabit(habit, false)" />
-                    </div>
-                </li>
+                    </template>
+                </HabitRow>
             </TransitionGroup>
 
             <p v-if="habits.length === 0" class="py-6 text-center text-sm text-ink-faint">
@@ -568,30 +554,18 @@ onMounted(() => {
 
         <!-- Archived habits -->
         <UiSection :title="`${t('archivedHabits')} (${archivedHabits.length})`" :icon="Archive">
-            <ul class="space-y-2">
-                <li v-for="habit in archivedHabits" :key="habit.id" :class="habitRowClass">
-                    <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" class="opacity-70" />
+            <ul v-if="archivedHabits.length > 0" class="divide-y divide-line border-y border-line">
+                <HabitRow v-for="habit in archivedHabits" :key="habit.id" :habit="habit" muted>
+                    <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
 
-                    <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-semibold text-ink-soft">{{ habit.name }}</p>
-                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <span :class="metaChipClass">{{ t(habit.habit_type) }}</span>
-                            <span v-if="habit.category"
-                                class="rounded-full bg-primary-500/10 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
-                                {{ habit.category.name }}
-                            </span>
-                            <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
-                        </div>
-                    </div>
-
-                    <div class="flex shrink-0 flex-col sm:flex-row">
+                    <template #actions>
                         <UiIconButton :icon="Pencil" :label="t('editHabit')" @click="startEditHabit(habit)" />
                         <UiIconButton :icon="ArchiveRestore" :label="t('unarchiveHabit')"
                             @click="handleUnarchive(habit)" />
                         <UiIconButton :icon="Trash2" variant="danger" :label="t('deleteHabitPermanently')"
                             @click="handleDeleteHabit(habit, true)" />
-                    </div>
-                </li>
+                    </template>
+                </HabitRow>
             </ul>
 
             <p v-if="archivedHabits.length === 0" class="py-6 text-center text-sm text-ink-faint">

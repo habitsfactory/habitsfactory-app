@@ -13,12 +13,15 @@ from .base import HabitApiTestCase
 
 try:  # the computation needs the scientific stack
     import numpy as np
-    from ..management.commands.compute_correlations import Command
+    from ..management.commands.compute_correlations import (
+        benjamini_hochberg,
+        build_series,
+        correlate,
+    )
 except ImportError:  # pragma: no cover
     np = None
-    Command = None
 
-needs_numpy = unittest.skipIf(np is None, "numpy / scipy / dtaidistance are not installed")
+needs_numpy = unittest.skipIf(np is None, "numpy / scipy are not installed")
 
 
 class CorrelationFixtureMixin:
@@ -39,13 +42,22 @@ class CorrelationModelTests(CorrelationFixtureMixin, HabitApiTestCase):
         a, b = self.make_habit("A"), self.make_habit("B")
         return float(self.correlation(a, b, **coefficients).max_correlation)
 
-    def test_takes_the_strongest_method(self):
-        self.assertEqual(self.strength(pearson_coefficient="0.3", spearman_coefficient="0.8"), 0.8)
+    def test_strength_is_the_spearman_coefficient(self):
+        # Pearson is stored for reference only: an outlier can inflate it
+        self.assertEqual(self.strength(pearson_coefficient="0.99", spearman_coefficient="0.6"), 0.6)
 
     def test_negative_coefficients_count_by_magnitude(self):
-        self.assertEqual(self.strength(pearson_coefficient="-0.9", spearman_coefficient="0.2"), 0.9)
+        self.assertEqual(self.strength(spearman_coefficient="-0.9"), 0.9)
 
-    def test_dtw_is_a_distance_so_it_is_inverted(self):
+    def test_direction(self):
+        a, b, c = self.make_habit("A"), self.make_habit("B"), self.make_habit("C")
+        self.assertEqual(self.correlation(a, b, spearman_coefficient="0.9").direction, "positive")
+        self.assertEqual(self.correlation(a, c, spearman_coefficient="-0.9").direction, "negative")
+
+    def test_rows_from_the_old_analysis_still_get_a_score(self):
+        self.assertEqual(self.strength(pearson_coefficient="-0.7"), 0.7)
+        HabitCorrelation.objects.all().delete()
+        self.user.habits.all().delete()
         self.assertEqual(self.strength(dtw_distance="0.25"), 0.75)
 
     def test_no_coefficient_means_zero(self):
@@ -86,13 +98,18 @@ class CorrelationSerializerTests(CorrelationFixtureMixin, HabitApiTestCase):
         self.assertEqual(float(data["max_correlation"]), 0.8)
         self.assertEqual(data["sample_size"], 20)
 
-    def test_description_names_both_habits(self):
-        for coefficient in ["0.95", "0.8", "0.6", "0.3"]:
-            description = self.serialize(coefficient)["description"]
-            self.assertIn("Run", description)
-            self.assertIn("Mood", description)
+    def test_description_names_both_habits_and_follows_the_direction(self):
+        seen = set()
+        for coefficient in ["0.95", "0.6", "0.3", "-0.3", "-0.6", "-0.95"]:
+            data = self.serialize(coefficient)
+            self.assertIn("Run", data["description"])
+            self.assertIn("Mood", data["description"])
+            self.assertEqual(data["direction"], "negative" if coefficient.startswith("-") else "positive")
+            self.assertEqual("opposite" in data["description"] or "down" in data["description"], coefficient.startswith("-"))
+            seen.add(data["description"])
             HabitCorrelation.objects.all().delete()
             self.user.habits.all().delete()
+        self.assertEqual(len(seen), 6)
 
 
 class CorrelationApiTests(CorrelationFixtureMixin, HabitApiTestCase):
@@ -170,72 +187,93 @@ class CorrelationApiTests(CorrelationFixtureMixin, HabitApiTestCase):
 
 @needs_numpy
 class CorrelationMathTests(unittest.TestCase):
-    def setUp(self):
-        self.command = Command()
+    DAYS = [date(2026, 1, 1) + timedelta(days=i) for i in range(6)]
 
-    def test_phi_coefficient(self):
-        x = np.array([1, 0, 1, 0, 1, 0, 1, 0])
-        self.assertAlmostEqual(self.command.compute_phi_coefficient(x, x), 1.0)
-        self.assertAlmostEqual(self.command.compute_phi_coefficient(x, 1 - x), -1.0)
-        self.assertAlmostEqual(self.command.compute_phi_coefficient(x, np.array([1, 1, 0, 0, 1, 1, 0, 0])), 0.0)
+    def series(self, habit_type, logged, first_logged=DAYS[0]):
+        values = {self.DAYS[i]: v for i, v in logged.items()}
+        return build_series(habit_type, values, self.DAYS, first_logged).tolist()
 
-    def test_phi_is_zero_when_a_habit_never_varies(self):
-        x = np.array([1, 0, 1, 0])
-        self.assertEqual(self.command.compute_phi_coefficient(x, np.ones(4)), 0.0)
+    def assert_series(self, actual, expected):
+        self.assertEqual(len(actual), len(expected))
+        for got, want in zip(actual, expected):
+            if want is None:
+                self.assertTrue(np.isnan(got), actual)
+            else:
+                self.assertEqual(got, want, actual)
 
-    def test_habit_type_categories(self):
-        class Stub:
-            def __init__(self, habit_type):
-                self.habit_type = habit_type
+    def test_a_blank_day_means_not_done_for_yes_no_and_counter_habits(self):
+        self.assert_series(self.series("boolean", {0: 1, 3: 1}), [1, 0, 0, 1, 0, 0])
+        self.assert_series(self.series("counter", {1: 4}), [0, 4, 0, 0, 0, 0])
 
-        categories = {t: self.command.get_habit_type_category(Stub(t)) for t in ["boolean", "counter", "value", "rating", ""]}
-        self.assertEqual(
-            categories,
-            {"boolean": "binary", "counter": "continuous", "value": "continuous", "rating": "ordinal", "": "continuous"},
-        )
+    def test_a_blank_day_means_unknown_for_measurements(self):
+        for habit_type in ["value", "rating", "percentage"]:
+            self.assert_series(self.series(habit_type, {1: 7.5, 4: 8}), [None, 7.5, None, None, 8, None])
 
-    def best(self, x, y, type1, type2):
-        x, y = np.array(x, dtype=float), np.array(y, dtype=float)
-        return self.command.compute_best_correlation(x, y, type1, type2, np.ones(len(x), dtype=bool))
+    def test_days_before_the_habit_existed_are_unknown(self):
+        started = self.DAYS[2]
+        self.assert_series(self.series("boolean", {2: 1, 4: 1}, first_logged=started), [None, None, 1, 0, 1, 0])
 
-    def test_method_is_chosen_from_the_habit_types(self):
-        binary = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-        rising = [9, 1, 8, 2, 9, 1, 7, 2, 8, 1]
+    def test_a_habit_first_logged_before_the_window_counts_from_day_one(self):
+        self.assert_series(self.series("boolean", {}, first_logged=date(2025, 6, 1)), [0, 0, 0, 0, 0, 0])
+
+    def compare(self, x, y, min_sample_size=4):
+        return correlate(np.array(x, dtype=float), np.array(y, dtype=float), min_sample_size)
+
+    def test_identical_and_opposite_series(self):
+        pattern = [1, 0, 1, 1, 0, 0, 1, 0, 1, 0]
+        spearman, p_value, pearson, days = self.compare(pattern, pattern)
+        self.assertAlmostEqual(spearman, 1.0)
+        self.assertAlmostEqual(pearson, 1.0)
+        self.assertLess(p_value, 0.001)
+        self.assertEqual(days, 10)
+
+        spearman, _, pearson, _ = self.compare(pattern, [1 - v for v in pattern])
+        self.assertAlmostEqual(spearman, -1.0)
+        self.assertAlmostEqual(pearson, -1.0)
+
+    def test_rank_correlation_ignores_the_scale(self):
+        hours = [5, 6, 7, 8, 9, 10, 11, 12]
+        score = [h ** 3 for h in hours]  # monotonic, far from linear
+        spearman, _, pearson, _ = self.compare(hours, score)
+        self.assertAlmostEqual(spearman, 1.0)
+        self.assertLess(pearson, 0.99)
+
+    def test_only_days_known_for_both_are_compared(self):
+        nan = float("nan")
+        x = [1, 0, 1, 0, 1, 0, nan, nan]
+        y = [nan, nan, 1, 0, 1, 0, 1, 0]
+        self.assertEqual(self.compare(x, y)[3], 4)
+
+    def test_not_comparable(self):
         ramp = list(range(10))
+        self.assertIsNone(self.compare(ramp, [3] * 10))  # one never changes
+        self.assertIsNone(self.compare([1] * 10, ramp))
+        self.assertIsNone(self.compare(ramp[:3], ramp[:3]))  # too few days
+        self.assertIsNone(self.compare(ramp, ramp, min_sample_size=11))
 
-        self.assertEqual(self.best(binary, binary, "binary", "binary")[1], "phi")
-        self.assertEqual(self.best(binary, rising, "binary", "continuous")[1], "point_biserial")
-        self.assertEqual(self.best(rising, binary, "continuous", "binary")[1], "point_biserial")
-        self.assertEqual(self.best(ramp, ramp, "continuous", "continuous")[1], "spearman")
-        self.assertEqual(self.best(ramp, ramp, "ordinal", "binary")[1], "spearman")
+    def test_benjamini_hochberg(self):
+        self.assertEqual(benjamini_hochberg([]), [])
+        self.assertEqual(benjamini_hochberg([0.01]), [True])
+        self.assertEqual(benjamini_hochberg([0.2]), [False])
+        # 0.04 would pass alone, but not as one of four tests...
+        self.assertEqual(benjamini_hochberg([0.04, 0.5, 0.6, 0.7]), [False, False, False, False])
+        # ...whereas a group of small p-values supports each other
+        self.assertEqual(benjamini_hochberg([0.03, 0.001, 0.02, 0.9]), [True, True, True, False])
 
-    def test_sign_follows_the_relationship(self):
-        ramp = list(range(10))
-        self.assertAlmostEqual(self.best(ramp, ramp, "continuous", "continuous")[0], 1.0)
-        self.assertAlmostEqual(self.best(ramp, ramp[::-1], "continuous", "continuous")[0], -1.0)
+    def test_random_habits_produce_almost_no_false_insights(self):
+        rng = np.random.default_rng(42)
+        habits = [rng.integers(0, 2, size=90).astype(float) for _ in range(28)]
+        p_values = [
+            correlate(habits[i], habits[j], 10)[1]
+            for i in range(28)
+            for j in range(i + 1, 28)
+        ]
 
-    def test_nothing_is_reported_without_evidence(self):
-        ramp = list(range(10))
-        noise = [3, 9, 1, 7, 2, 8, 4, 6, 5, 5]
-        none = (None, None, None)
+        naive = sum(p < 0.05 for p in p_values)
+        kept = sum(benjamini_hochberg(p_values))
 
-        self.assertEqual(self.best(ramp, noise, "continuous", "continuous"), none)  # not significant
-        self.assertEqual(self.best(ramp, [4] * 10, "continuous", "continuous"), none)  # no variation
-        self.assertEqual(self.best([1] * 10, ramp, "binary", "continuous"), none)
-        self.assertEqual(self.best([1, 2], [1, 2], "continuous", "continuous"), none)  # too few points
-
-    def test_lagged_correlation_detects_a_one_day_shift(self):
-        x = np.array([1, 5, 2, 8, 3, 9, 4, 7, 6, 10, 2, 5], dtype=float)
-        y = np.concatenate([[0.0], x[:-1]])  # y today = x yesterday
-
-        self.assertAlmostEqual(self.command.compute_lagged_correlation(x, y, lag=1), 1.0)
-
-    def test_lagged_correlation_needs_enough_points(self):
-        short = np.array([1.0, 2.0, 3.0])
-        self.assertIsNone(self.command.compute_lagged_correlation(short, short, lag=1))
-        self.assertIsNone(self.command.compute_lagged_correlation(short, short, lag=5))
-        gaps = np.array([1.0, np.nan, 2.0, np.nan, 3.0, np.nan, 4.0, np.nan])
-        self.assertIsNone(self.command.compute_lagged_correlation(gaps, gaps, lag=1))
+        self.assertGreater(naive, 8)  # plain p < 0.05 lets ~5% of 378 pairs through
+        self.assertLessEqual(kept, 1)
 
 
 @needs_numpy
@@ -295,7 +333,7 @@ class ComputeCorrelationsCommandTests(HabitApiTestCase):
         correlation = self.pair(steps, distance)
         self.assertAlmostEqual(float(correlation.pearson_coefficient), 1.0, places=3)
         self.assertAlmostEqual(float(correlation.spearman_coefficient), 1.0, places=3)
-        self.assertIsNotNone(correlation.dtw_distance)
+        self.assertIsNone(correlation.dtw_distance)
 
     def test_unrelated_habits_are_not_stored(self):
         a, b = self.make_habit("A", "value"), self.make_habit("B", "value")
@@ -361,9 +399,9 @@ class ComputeCorrelationsCommandTests(HabitApiTestCase):
     def test_only_overlapping_days_are_compared(self):
         run, stretch = self.make_habit("Run"), self.make_habit("Stretch")
         self.series(run, [1, 0] * 10)
-        self.series(stretch, [None] * 12 + [1, 0] * 4)  # logged on the last 8 days only
+        self.series(stretch, [None] * 12 + [1, 0] * 4)  # started 8 days ago
 
-        self.run_command()
+        self.run_command("--min-sample-size", "4")
 
         self.assertEqual(self.pair(run, stretch).sample_size, 8)
 
@@ -422,4 +460,135 @@ class ComputeCorrelationsCommandTests(HabitApiTestCase):
         self.series(run, pattern)
         self.series(stretch, pattern)
 
-        self.assertIn("phi: 1", self.run_command("--verbose"))
+        self.assertIn("2 habits, 1 pairs tested, 1 kept", self.run_command("--verbose"))
+
+    def test_blank_days_count_as_not_done(self):
+        """Yes/no habits logged only on the days they happen (the usual way)."""
+        gym, protein = self.make_habit("Gym"), self.make_habit("Protein shake")
+        pattern = [1, None, None, 1, None, 1, 1, None, None, None, 1, None, 1, None, None, 1, None, None, 1, 1]
+        self.series(gym, pattern)
+        self.series(protein, pattern)
+
+        self.run_command()
+
+        correlation = self.pair(gym, protein)
+        self.assertIsNotNone(correlation)
+        self.assertEqual(float(correlation.spearman_coefficient), 1.0)
+        self.assertEqual(correlation.sample_size, self.DAYS)
+
+    def test_blank_days_of_a_measurement_are_not_zero(self):
+        gym, sleep = self.make_habit("Gym"), self.make_habit("Sleep", "value")
+        self.series(gym, [1, 0] * 10)
+        # Slept more on gym days; half of the nights were not logged at all
+        self.series(sleep, [9, 6, None, None] * 5)
+
+        self.run_command("--min-sample-size", "4")
+
+        correlation = self.pair(gym, sleep)
+        self.assertEqual(correlation.sample_size, 10)
+        self.assertEqual(float(correlation.spearman_coefficient), 1.0)
+
+    def test_results_that_no_longer_hold_are_removed(self):
+        run, stretch = self.make_habit("Run"), self.make_habit("Stretch")
+        self.series(run, [1, 0] * 10)
+        self.series(stretch, [1, 0] * 10)
+        self.run_command()
+        self.assertEqual(HabitCorrelation.objects.count(), 1)
+
+        Completion.objects.filter(habit=stretch).delete()
+        self.run_command()
+
+        self.assertEqual(HabitCorrelation.objects.count(), 0)
+
+    def test_a_handful_of_days_is_not_enough(self):
+        """Five matching days are a coincidence, not an insight."""
+        a, b = self.make_habit("A", "value"), self.make_habit("B", "value")
+        self.series(a, [1, 2, 3, 4, 5])
+        self.series(b, [2, 4, 6, 8, 10])
+
+        self.run_command()
+
+        self.assertEqual(HabitCorrelation.objects.count(), 0)
+
+    def test_the_direction_reaches_the_api(self):
+        early, late = self.make_habit("Early night"), self.make_habit("Late night")
+        self.series(early, [1, 0] * 10)
+        self.series(late, [0, 1] * 10)
+        self.run_command()
+
+        insight = self.client.get("/api/correlations/").data["insights"][0]
+
+        self.assertEqual(insight["direction"], "negative")
+        self.assertEqual(float(insight["max_correlation"]), 1.0)
+
+
+@needs_numpy
+class ComputeEndpointTests(CorrelationFixtureMixin, HabitApiTestCase):
+    """The "Recompute" button of the Insights tab."""
+
+    URL = "/api/correlations/compute/"
+
+    def series(self, habit, values):
+        for offset, value in enumerate(reversed(values), start=1):
+            Completion.objects.create(habit=habit, date=self.today - timedelta(days=offset), value=value)
+
+    def matching_pair(self, user=None):
+        a, b = self.make_habit("Run", user=user), self.make_habit("Stretch", user=user)
+        self.series(a, [1, 0] * 10)
+        self.series(b, [1, 0] * 10)
+        return a, b
+
+    def test_requires_authentication(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(self.URL).status_code, 401)
+
+    def test_computes_my_correlations_on_demand(self):
+        self.matching_pair()
+
+        response = self.client.post(self.URL)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["correlations"], 1)
+        self.assertEqual(response.data["end_date"], self.today - timedelta(days=1))
+        insights = self.client.get("/api/correlations/").data["insights"]
+        self.assertEqual(insights[0]["strength"], "very_strong")
+
+    def test_only_touches_my_data(self):
+        self.matching_pair()
+        x, y = self.matching_pair(user=self.other)
+        theirs = self.correlation(x, y, user=self.other, spearman_coefficient="0.5")
+
+        self.client.post(self.URL)
+
+        self.assertEqual(HabitCorrelation.objects.filter(user=self.user).count(), 1)
+        theirs.refresh_from_db()  # still there, untouched
+        self.assertEqual(float(theirs.spearman_coefficient), 0.5)
+
+    def test_replaces_stale_results(self):
+        a, b = self.make_habit("Old A"), self.make_habit("Old B")
+        self.correlation(a, b, spearman_coefficient="0.9")  # no data behind it any more
+
+        response = self.client.post(self.URL)
+
+        self.assertEqual(response.data["correlations"], 0)
+        self.assertEqual(HabitCorrelation.objects.filter(user=self.user).count(), 0)
+
+    def test_window_can_be_widened_and_is_clamped(self):
+        a, b = self.make_habit("Run"), self.make_habit("Stretch")
+        for habit in (a, b):  # only data from 40 to 31 days ago
+            for offset, value in enumerate([1, 0] * 5, start=31):
+                Completion.objects.create(habit=habit, date=self.today - timedelta(days=offset), value=value)
+
+        self.assertEqual(self.client.post(self.URL, {"days": 30}, format="json").data["correlations"], 0)
+        self.assertEqual(self.client.post(self.URL, {"days": 60}, format="json").data["correlations"], 1)
+
+        default = self.client.post(self.URL).data
+        self.assertEqual(default["start_date"], self.today - timedelta(days=90))
+        clamped = self.client.post(self.URL, {"days": 99999}, format="json").data
+        self.assertEqual(clamped["start_date"], self.today - timedelta(days=730))
+        garbage = self.client.post(self.URL, {"days": "soon"}, format="json")
+        self.assertEqual(garbage.status_code, 200)
+
+    def test_is_rate_limited(self):
+        statuses = {self.client.post(self.URL).status_code for _ in range(25)}
+        self.assertEqual(statuses, {200, 429})

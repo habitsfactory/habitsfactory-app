@@ -9,7 +9,6 @@ django-cors-headers==4.9.0
 django-crontab==0.7.1
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
-dtaidistance==2.3.13
 gunicorn==23.0.0
 idna==3.11
 numpy==2.4.1

@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useLanguage } from '@/composables/useLanguage'
-import { notifyError } from '@/composables/useToast'
-import { Lightbulb, Link2, CalendarDays } from 'lucide-vue-next'
+import { notifyError, notifySuccess } from '@/composables/useToast'
+import { Lightbulb, Link2, Unlink2, CalendarDays, RefreshCw } from 'lucide-vue-next'
 import api from '@/services/api'
 import { parseISODate } from '@/utils/dates'
 import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import UiEmptyState from '@/components/ui/UiEmptyState.vue'
 import HabitIcon from '@/components/habits/HabitIcon.vue'
 
@@ -34,6 +35,22 @@ const fetchInsightsData = async () => {
     }
 }
 
+// Recompute now instead of waiting for the nightly job
+const isComputing = ref(false)
+
+const computeInsights = async () => {
+    isComputing.value = true
+    try {
+        await api.post('correlations/compute/')
+        await fetchInsightsData()
+        notifySuccess('insightsUpdated')
+    } catch (err) {
+        notifyError(err, err.response?.status === 429 ? 'computeThrottled' : 'computeFailed')
+    } finally {
+        isComputing.value = false
+    }
+}
+
 // Badge color + translation key per correlation strength
 const strengths = {
     very_strong: { key: 'strengthVeryStrong', class: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
@@ -44,6 +61,13 @@ const strengths = {
 }
 
 const strengthOf = (insight) => strengths[insight.strength] || strengths.moderate
+
+// "Together" or "opposite", and how consistently
+const describe = (insight) => {
+    const level = insight.max_correlation >= 0.7 ? 'Strong' : insight.max_correlation >= 0.5 ? 'Medium' : 'Light'
+    const direction = insight.direction === 'negative' ? 'Negative' : 'Positive'
+    return t(`insight${direction}${level}`, { a: insight.habit1.name, b: insight.habit2.name })
+}
 
 const formatDate = (value) => parseISODate(value).toLocaleDateString(locale.value, {
     year: 'numeric', month: 'short', day: 'numeric'
@@ -63,9 +87,15 @@ onMounted(() => {
             class="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary-600 to-primary-950 p-5 text-white shadow-md sm:p-6">
             <Lightbulb :size="170" stroke-width="1.5"
                 class="pointer-events-none absolute -right-6 -bottom-10 text-white/10" />
-            <div class="relative">
-                <h2 class="font-display text-3xl font-bold tracking-wide uppercase">{{ t('habitInsights') }}</h2>
-                <p class="mt-1 text-sm text-primary-100">{{ t('discoverCorrelations') }}</p>
+            <div class="relative flex flex-wrap items-end justify-between gap-4">
+                <div class="min-w-0">
+                    <h2 class="font-display text-3xl font-bold tracking-wide uppercase">{{ t('habitInsights') }}</h2>
+                    <p class="mt-1 text-sm text-primary-100">{{ t('discoverCorrelations') }}</p>
+                </div>
+                <UiButton variant="inverse" :icon="RefreshCw" :loading="isComputing" :title="t('computeInsightsHint')"
+                    @click="computeInsights">
+                    {{ isComputing ? t('computingInsights') : t('computeInsights') }}
+                </UiButton>
             </div>
         </section>
 
@@ -77,7 +107,7 @@ onMounted(() => {
                 <div class="flex items-center justify-between gap-3">
                     <span
                         :class="['rounded-full px-2.5 py-1 text-xs font-semibold tracking-wider uppercase', strengthOf(insight).class]">
-                        {{ t(strengthOf(insight).key) }}
+                        {{ t(strengthOf(insight).key) }} · {{ t(insight.direction === 'negative' ? 'insightOpposite' : 'insightTogether') }}
                     </span>
                     <span class="font-display text-4xl leading-none font-semibold text-primary-600 tabular-nums dark:text-primary-400"
                         :title="t('correlation')">
@@ -92,7 +122,8 @@ onMounted(() => {
                             <span class="-ml-px h-full w-px bg-line-strong"></span>
                             <span
                                 class="-ml-3 inline-flex size-6 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-faint">
-                                <Link2 :size="12" stroke-width="2.5" />
+                                <component :is="insight.direction === 'negative' ? Unlink2 : Link2" :size="12"
+                                    stroke-width="2.5" />
                             </span>
                         </div>
                         <div class="flex items-center gap-3 rounded-xl bg-sunken p-3">
@@ -107,9 +138,7 @@ onMounted(() => {
                     </template>
                 </div>
 
-                <p v-if="insight.description" class="mb-4 text-sm leading-relaxed text-ink-soft">
-                    {{ insight.description }}
-                </p>
+                <p class="mb-4 text-sm leading-relaxed text-ink-soft">{{ describe(insight) }}</p>
 
                 <div
                     class="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line pt-3 text-xs font-medium text-ink-faint">

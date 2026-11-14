@@ -1,6 +1,6 @@
 """CSV import: the formats and edge cases it has to cope with."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from ..models import Category, Completion, Habit, Tag
 from .base import HabitApiTestCase
@@ -132,3 +132,84 @@ class CsvImportTests(HabitApiTestCase):
         lines = response.data["csv_content"].strip().splitlines()
         self.assertEqual(lines[0], f"{HEADER},2026-01-01,2026-01-02,2026-01-03")
         self.assertEqual(lines[1:], ["Run,boolean,#22c55e,footprints,,,,,,1.0,"])
+
+
+class CsvSpreadsheetFormatTests(HabitApiTestCase):
+    """Hand-maintained spreadsheets: other date styles, extra columns, notes."""
+
+    def import_csv(self, *lines):
+        return self.client.post(
+            "/api/habits/import_csv/", {"csv_content": "\n".join(lines)}, format="json"
+        )
+
+    def dates_of(self, name):
+        return sorted(Habit.objects.get(name=name).completions.values_list("date", flat=True))
+
+    def test_day_first_dates(self):
+        response = self.import_csv(
+            f"{HEADER},01-02-2026,13-02-2026,28-02-2026",
+            "Run,boolean,,,,,,,1,1,1",
+        )
+
+        self.assertEqual(response.data["completions_created"], 3)
+        self.assertEqual(self.dates_of("Run"), [date(2026, 2, 1), date(2026, 2, 13), date(2026, 2, 28)])
+
+    def test_ambiguous_dates_default_to_day_first(self):
+        self.import_csv(f"{HEADER},03-04-2026", "Run,boolean,,,,,,,1")
+        self.assertEqual(self.dates_of("Run"), [date(2026, 4, 3)])
+
+    def test_month_first_is_detected_from_the_file(self):
+        self.import_csv(f"{HEADER},02/01/2026,02/13/2026", "Run,boolean,,,,,,,1,1")
+        self.assertEqual(self.dates_of("Run"), [date(2026, 2, 1), date(2026, 2, 13)])
+
+    def test_other_separators(self):
+        self.import_csv(f"{HEADER},31.12.2025,2026/01/01", "Run,boolean,,,,,,,1,1")
+        self.assertEqual(self.dates_of("Run"), [date(2025, 12, 31), date(2026, 1, 1)])
+
+    def test_extra_columns_text_cells_and_typos(self):
+        """Shape of a real-world sheet: leading group column, a computed
+        average, a habit tracked with letter codes, a mistyped number."""
+        response = self.import_csv(
+            "Category,Habit Name,Type,Color,Icon,Category,Tags,Unit,Max Value,Per day average,01-01-2026,02-01-2026,03-01-2026",
+            'Misc,Coffee,counter,,coffee,Misc,,,,"1,16",1,"1,5",',
+            ',Screen,value,,monitor,Misc,,hr,,"1,24","1,5",3m25,7.5',
+            ",Work,,,briefcase,Misc,,,,,v,c,r",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["habits_created"], 3)
+        self.assertEqual(response.data["completions_created"], 4)
+        self.assertEqual(response.data["values_skipped"], 4)  # 3m25, v, c, r
+        coffee = Habit.objects.get(name="Coffee")
+        self.assertEqual(coffee.category.name, "Misc")
+        self.assertEqual(sorted(float(v) for v in coffee.completions.values_list("value", flat=True)), [1.0, 1.5])
+        self.assertEqual(self.dates_of("Screen"), [date(2026, 1, 1), date(2026, 1, 3)])
+        self.assertEqual(Habit.objects.get(name="Work").completions.count(), 0)
+
+    def test_a_year_of_data_is_written_in_a_few_queries(self):
+        days = [date(2026, 1, 1) + timedelta(days=i) for i in range(365)]
+        header = f"{HEADER}," + ",".join(d.strftime("%d-%m-%Y") for d in days)
+        row = "Run,counter,#111111,star,,,,," + ",".join("2" for _ in days)
+
+        with self.assertNumQueries(FuzzyLessThan(25)):
+            response = self.import_csv(header, row)
+
+        self.assertEqual(response.data["completions_created"], 365)
+
+    def test_reimport_counts_only_new_days(self):
+        self.import_csv(f"{HEADER},01-01-2026", "Run,counter,,,,,,,1")
+
+        response = self.import_csv(f"{HEADER},01-01-2026,02-01-2026", "Run,counter,,,,,,,5,2")
+
+        self.assertEqual(response.data["completions_created"], 1)
+        values = dict(Habit.objects.get(name="Run").completions.values_list("date", "value"))
+        self.assertEqual(float(values[date(2026, 1, 1)]), 5.0)
+
+
+class FuzzyLessThan(int):
+    """Lets assertNumQueries check an upper bound instead of an exact count."""
+
+    def __eq__(self, other):
+        return other < int(self)
+
+    __hash__ = int.__hash__

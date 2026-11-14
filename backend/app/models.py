@@ -169,30 +169,31 @@ class HabitCorrelation(models.Model):
 
     def _compute_max_correlation(self):
         """
-        Computes the maximum correlation strength across all three methods.
+        Strength of the relationship, from 0 (none) to 1 (perfect).
 
-        Takes the absolute value for Pearson and Spearman coefficients
-        (since both -1 and +1 indicate strong correlation),
-        and inverts DTW distance (since lower DTW = stronger similarity).
-
-        Returns a value between 0 and 1, where 1 = strongest correlation.
+        This is the magnitude of the Spearman coefficient, the one the
+        analysis tests for significance: -0.8 is as strong as +0.8, the sign
+        only tells the direction. Rows written before the analysis was
+        reworked may lack it; they fall back to the other stored measures.
         """
-        correlations = []
-
-        # Pearson correlation: -1 to 1, use absolute value
-        if self.pearson_coefficient is not None:
-            correlations.append(abs(float(self.pearson_coefficient)))
-
-        # Spearman correlation: -1 to 1, use absolute value
         if self.spearman_coefficient is not None:
-            correlations.append(abs(float(self.spearman_coefficient)))
+            return abs(float(self.spearman_coefficient))
 
-        # DTW distance: 0+ (normalized 0-1), invert it (1 - distance)
-        # so that 0 distance becomes 1 (perfect match)
+        legacy = []
+        if self.pearson_coefficient is not None:
+            legacy.append(abs(float(self.pearson_coefficient)))
         if self.dtw_distance is not None:
-            correlations.append(1 - float(self.dtw_distance))
+            legacy.append(1 - float(self.dtw_distance))
+        return max(legacy) if legacy else 0.0
 
-        return max(correlations) if correlations else 0.0
+    @property
+    def direction(self):
+        """ "positive": the habits rise and fall together; "negative": one
+        goes up when the other goes down."""
+        coefficient = self.spearman_coefficient
+        if coefficient is None:
+            coefficient = self.pearson_coefficient
+        return "negative" if coefficient is not None and float(coefficient) < 0 else "positive"
 
     def save(self, *args, **kwargs):
         self.max_correlation = self._compute_max_correlation()
