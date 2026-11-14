@@ -1,17 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '@/views/LoginView.vue'
-import RegisterView from '@/views/RegisterView.vue'
-import RegisterAdminView from '@/views/RegisterAdminView.vue'
 import DashboardView from '@/views/DashboardView.vue'
-import AdminSettings from '@/views/AdminSettings.vue'
-import ProfileView from '@/views/ProfileView.vue'
-import ExportView from '@/views/ExportView.vue'
-import ImportView from '@/views/ImportView.vue'
 import authService from '@/services/auth'
 
+// Secondary pages are loaded on demand to keep the initial bundle small
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  scrollBehavior() {
+  scrollBehavior(to, from) {
+    // Don't jump to the top when only the query changes (dashboard tabs)
+    if (to.path === from.path) return false
     return { top: 0 }
   },
   routes: [
@@ -24,13 +21,13 @@ const router = createRouter({
     {
       path: '/register',
       name: 'register',
-      component: RegisterView,
+      component: () => import('@/views/RegisterView.vue'),
       meta: { requiresAuth: false }
     },
     {
       path: '/register-admin',
       name: 'register-admin',
-      component: RegisterAdminView,
+      component: () => import('@/views/RegisterAdminView.vue'),
       meta: { requiresAuth: false }
     },
     {
@@ -42,29 +39,33 @@ const router = createRouter({
     {
       path: '/admin-settings',
       name: 'admin-settings',
-      component: AdminSettings,
+      component: () => import('@/views/AdminSettings.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/profile',
       name: 'profile',
-      component: ProfileView,
+      component: () => import('@/views/ProfileView.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/export',
       name: 'export',
-      component: ExportView,
+      component: () => import('@/views/ExportView.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/import',
       name: 'import',
-      component: ImportView,
+      component: () => import('@/views/ImportView.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/',
+      redirect: '/dashboard'
+    },
+    {
+      path: '/:pathMatch(.*)*',
       redirect: '/dashboard'
     }
   ]

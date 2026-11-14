@@ -144,7 +144,7 @@ class Command(BaseCommand):
         """Categorize habit type for correlation method selection."""
         if habit.habit_type == 'boolean':
             return 'binary'
-        elif habit.habit_type in ['counter', 'value']:
+        elif habit.habit_type in ['counter', 'value', 'percentage']:
             return 'continuous'
         elif habit.habit_type == 'rating':
             return 'ordinal'

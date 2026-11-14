@@ -1,246 +1,93 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import * as LucideIcons from 'lucide-vue-next'
-import { ChevronDown } from 'lucide-vue-next'
+import { ref, computed, nextTick } from 'vue'
+import { ChevronDown, Search, LoaderCircle } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
-
-const { t } = useLanguage()
+import { iconNames, iconsReady, resolveIcon, loadIcons } from '@/utils/icons'
+import { inputClass, inputBaseClass, labelClass } from '@/components/ui/styles'
 
 const props = defineProps({
-  modelValue: {
-    type: String,
-    default: ''
-  },
-  label: {
-    type: String,
-    default: 'Icon'
-  }
+  modelValue: { type: String, default: '' },
+  label: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-const isPickerOpen = ref(false)
+const { t } = useLanguage()
+
+loadIcons()
+
+const isOpen = ref(false)
 const searchQuery = ref('')
-const toggleButton = ref(null)
-const dropdown = ref(null)
 const searchInput = ref(null)
-const dropdownStyle = ref({})
 
-// Get all available Lucide icon names
-const allIcons = computed(() => {
-  // Filter out non-icon exports
-  const excluded = ['createElement', 'createIcons', 'default', 'icons', 'Icon', 'createLucideIcon']
-  return Object.keys(LucideIcons)
-    .filter(key => {
-      if (excluded.includes(key)) return false
-      if (key[0] !== key[0].toUpperCase()) return false
-      // Ensure it's a valid component (object or function)
-      const component = LucideIcons[key]
-      return component && (typeof component === 'object' || typeof component === 'function')
-    })
-    .sort()
-})
+// Rendering ~1500 icons at once is slow; show the first matches only.
+const MAX_RESULTS = 96
 
-// Filter icons based on search query (limited to 100 for performance)
 const filteredIcons = computed(() => {
-  let icons = allIcons.value
-
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    icons = icons.filter(iconName => iconName.toLowerCase().includes(query))
-  }
-
-  return icons.slice(0, 100)
+  const query = searchQuery.value.trim().toLowerCase().replace(/[\s-]+/g, '')
+  const names = iconNames.value
+  const matches = query ? names.filter((name) => name.toLowerCase().includes(query)) : names
+  return matches.slice(0, MAX_RESULTS)
 })
 
-// Get the component for a given icon name
-const getIconComponent = (iconName) => {
-  const component = LucideIcons[iconName]
-  if (component && (typeof component === 'object' || typeof component === 'function')) {
-    return component
-  }
-  return null
+const selectedIcon = computed(() => (props.modelValue ? resolveIcon(props.modelValue) : null))
+
+// Stored names can be "book-open" or "BookOpen" — compare them loosely
+const normalize = (name) => (name || '').toLowerCase().replace(/[\s_-]+/g, '')
+const isSelected = (name) => normalize(name) === normalize(props.modelValue)
+
+const toggle = () => {
+  isOpen.value = !isOpen.value
+  if (isOpen.value) nextTick(() => searchInput.value?.focus())
 }
 
-// Get the currently selected icon component
-const selectedIconComponent = computed(() => {
-  if (!props.modelValue) return null
-
-  // Try exact match first
-  if (LucideIcons[props.modelValue]) {
-    return LucideIcons[props.modelValue]
-  }
-
-  // Try with capitalized first letter
-  const capitalized = props.modelValue.charAt(0).toUpperCase() + props.modelValue.slice(1)
-  if (LucideIcons[capitalized]) {
-    return LucideIcons[capitalized]
-  }
-
-  return null
-})
-
-// Calculate dropdown position
-const updateDropdownPosition = () => {
-  if (!toggleButton.value) return
-
-  const rect = toggleButton.value.getBoundingClientRect()
-  const viewportHeight = window.innerHeight
-  const dropdownHeight = 384 // max-h-96 = 384px
-
-  // Check if there's enough space below
-  const spaceBelow = viewportHeight - rect.bottom
-  const spaceAbove = rect.top
-
-  if (spaceBelow >= dropdownHeight || spaceBelow >= spaceAbove) {
-    // Position below
-    dropdownStyle.value = {
-      top: `${rect.bottom + 8}px`,
-      left: `${rect.left}px`,
-      width: `${rect.width}px`
-    }
-  } else {
-    // Position above
-    dropdownStyle.value = {
-      bottom: `${viewportHeight - rect.top + 8}px`,
-      left: `${rect.left}px`,
-      width: `${rect.width}px`
-    }
-  }
-}
-
-// Toggle picker
-const togglePicker = () => {
-  isPickerOpen.value = !isPickerOpen.value
-  if (isPickerOpen.value) {
-    nextTick(() => {
-      updateDropdownPosition()
-      searchInput.value?.focus()
-    })
-  }
-}
-
-// Select an icon
-const selectIcon = (iconName) => {
-  emit('update:modelValue', iconName)
-  isPickerOpen.value = false
+const select = (name) => {
+  emit('update:modelValue', name)
+  isOpen.value = false
   searchQuery.value = ''
 }
-
-// Handle click outside
-const handleClickOutside = (event) => {
-  if (!isPickerOpen.value) return
-
-  if (
-    dropdown.value &&
-    !dropdown.value.contains(event.target) &&
-    toggleButton.value &&
-    !toggleButton.value.contains(event.target)
-  ) {
-    isPickerOpen.value = false
-    searchQuery.value = ''
-  }
-}
-
-// Handle escape key
-const handleEscape = (event) => {
-  if (event.key === 'Escape' && isPickerOpen.value) {
-    isPickerOpen.value = false
-    searchQuery.value = ''
-  }
-}
-
-// Lifecycle
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-  document.addEventListener('keydown', handleEscape)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-  document.removeEventListener('keydown', handleEscape)
-})
 </script>
 
 <template>
-  <div class="space-y-2 relative">
-    <label class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">
-      {{ label }}
-    </label>
+  <div>
+    <span v-if="label" :class="labelClass">{{ label }}</span>
 
-    <!-- Selected Icon Display & Button -->
-    <button ref="toggleButton" type="button" @click="togglePicker"
-      class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 font-bold outline-none text-neutral-900 dark:text-white hover:border-primary-500 transition-colors flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <component v-if="selectedIconComponent" :is="selectedIconComponent" :size="24" class="text-primary-600" />
-        <span>{{ modelValue || 'Select an icon' }}</span>
-      </div>
-      <ChevronDown :size="20" :class="{ 'rotate-180': isPickerOpen }" class="transition-transform" />
+    <button type="button" :aria-expanded="isOpen"
+      :class="[inputClass, 'flex items-center gap-3 text-left', isOpen && 'border-primary-500 ring-3 ring-primary-500/20']"
+      @click="toggle">
+      <component :is="selectedIcon" v-if="selectedIcon" :size="20" stroke-width="2.25"
+        class="shrink-0 text-primary-600 dark:text-primary-400" />
+      <span class="min-w-0 flex-1 truncate" :class="modelValue ? '' : 'text-ink-faint'">
+        {{ modelValue || t('selectIcon') }}
+      </span>
+      <ChevronDown :size="18" class="shrink-0 text-ink-faint transition-transform" :class="isOpen && 'rotate-180'" />
     </button>
 
-    <!-- Icon Picker Dropdown - Teleported to body -->
-    <Teleport to="body">
-      <div v-if="isPickerOpen" ref="dropdown" @click.stop :style="dropdownStyle"
-        class="fixed z-9999 bg-white dark:bg-neutral-800 border-2 border-neutral-200 dark:border-neutral-700 rounded-3xl p-6 shadow-2xl max-h-96 overflow-hidden flex flex-col animate-in fade-in duration-200">
-        <!-- Search Input -->
-        <div class="mb-4">
-          <input ref="searchInput" v-model="searchQuery" type="text" :placeholder="t('searchIcons')"
-            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-4 py-3 font-bold text-neutral-900 dark:text-white focus:border-primary-500 transition outline-none" />
-        </div>
-
-        <!-- Icons Grid -->
-        <div class="overflow-y-auto flex-1 -mx-2">
-          <div class="grid grid-cols-6 gap-2 px-2">
-            <button v-for="iconName in filteredIcons" :key="iconName" type="button" @click="selectIcon(iconName)"
-              :class="[
-                'flex flex-col items-center justify-center p-3 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors border-2',
-                modelValue === iconName
-                  ? 'bg-primary-100 dark:bg-primary-900/50 border-primary-500'
-                  : 'border-transparent'
-              ]" :title="iconName">
-              <component v-if="getIconComponent(iconName)" :is="getIconComponent(iconName)" :size="24"
-                class="text-neutral-700 dark:text-neutral-300" />
-              <span class="text-[8px] mt-1 text-neutral-500 dark:text-neutral-400 truncate w-full text-center">
-                {{ iconName }}
-              </span>
-            </button>
-          </div>
-
-          <!-- No Results Message -->
-          <div v-if="filteredIcons.length === 0" class="text-center py-8 text-neutral-400">
-            No icons found
-          </div>
-        </div>
+    <div v-if="isOpen" class="mt-2 rounded-xl border border-line bg-sunken/50 p-3">
+      <div class="relative">
+        <Search :size="16" class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-faint" />
+        <input ref="searchInput" v-model="searchQuery" type="search" :placeholder="t('searchIcons')"
+          :class="[inputBaseClass, 'h-10 pl-9']" @keydown.enter.prevent @keydown.esc.stop="isOpen = false" />
       </div>
-    </Teleport>
+
+      <div class="mt-3 grid max-h-52 grid-cols-6 gap-1 overflow-y-auto pr-1 sm:grid-cols-8">
+        <button v-for="name in filteredIcons" :key="name" type="button" :title="name" :aria-label="name"
+          :aria-pressed="isSelected(name)" :class="[
+            'inline-flex aspect-square items-center justify-center rounded-lg transition-colors',
+            isSelected(name)
+              ? 'bg-primary-600 text-white'
+              : 'text-ink-soft hover:bg-surface hover:text-ink',
+          ]" @click="select(name)">
+          <component :is="resolveIcon(name)" :size="20" stroke-width="2" />
+        </button>
+      </div>
+
+      <div v-if="!iconsReady" class="flex justify-center py-6 text-primary-500">
+        <LoaderCircle :size="22" class="animate-spin" />
+      </div>
+      <p v-else-if="filteredIcons.length === 0" class="py-6 text-center text-sm text-ink-faint">
+        {{ t('noIconsFound') }}
+      </p>
+    </div>
   </div>
 </template>
-
-
-<style scoped>
-/* Custom scrollbar */
-.overflow-y-auto::-webkit-scrollbar {
-  width: 8px;
-}
-
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
-  border-radius: 4px;
-}
-
-.dark .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #57534e;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
-}
-
-.dark .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #92400e;
-}
-</style>

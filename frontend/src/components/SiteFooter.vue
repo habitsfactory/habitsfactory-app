@@ -1,106 +1,90 @@
 <script setup>
-import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+import { Github, Mail, Globe } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
-import { useDarkMode } from '@/composables/useDarkMode'
+import { useCurrentUser } from '@/composables/useCurrentUser'
 
-const { isDark, toggleDarkMode } = useDarkMode()
-
-const router = useRouter()
 const { t } = useLanguage()
+const { isAdmin, fetchUser } = useCurrentUser()
 
-const goToAdminSettings = () => {
-    router.push('/admin-settings')
-}
+const linkClass = 'inline-flex items-center gap-2 rounded-md text-ink-soft transition-colors hover:text-primary-600 dark:hover:text-primary-400'
+const headingClass = 'mb-3 text-xs font-semibold tracking-wider text-ink-faint uppercase'
 
-const goToProfile = () => {
-    router.push('/profile')
-}
-
-const goToExport = () => {
-    router.push('/export')
-}
+onMounted(() => fetchUser())
 </script>
 
 <template>
-    <!-- Footer -->
-    <footer class="py-12 px-6">
-        <div class="dark:text-white max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div class="flex flex-col gap-4">
-                <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer">
-                    <img src="/logo_edition.svg" alt="Habits Factory Logo" class="h-32 w-32 object-contain center" />
-                </a>
-                <span class="text-xl font-bold tracking-tight">Habits Factory</span>
-                <p class="text-sm text-gray-400">Building better routines, one day at a time.</p>
-                <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer">
-                    <span
-                        class="text-sm text-gray-500 hover:text-primary-400 transition-colors">https://habitsfactory.io</span>
-                </a>
-            </div>
-            <div>
-                <h3 class="font-semibold mb-4 uppercase text-xs tracking-wider">Management</h3>
-                <ul class="space-y-2 text-sm">
-                    <li>
-                        <button @click="goToAdminSettings"
-                            class="hover:text-primary-400 transition-colors flex items-center pl-0">
-                            <span>{{ t('adminSettings') }}</span>
-                        </button>
-                    </li>
-                    <li>
-                        <button @click="goToProfile"
-                            class="hover:text-primary-400 transition-colors flex items-center pl-0">
-                            <span>{{ t('profile') }}</span>
-                        </button>
-                    </li>
-                </ul>
-            </div>
-            <div>
-                <h3 class="font-semibold mb-4 uppercase text-xs tracking-wider">Data</h3>
-                <ul class="space-y-2 text-sm">
-                    <li>
-                        <button @click="goToExport"
-                            class="hover:text-primary-400 transition-colors flex items-center pl-0">
-                            <span>{{ t('importData') }}</span>
-                        </button>
-                    </li>
-                    <li>
-                        <button @click="goToExport"
-                            class="hover:text-primary-400 transition-colors flex items-center pl-0">
-                            <span>{{ t('exportData') }}</span>
-                        </button>
-                    </li>
-                </ul>
-            </div>
-            <div>
-                <h3 class="font-semibold mb-4 uppercase text-xs tracking-wider">Support</h3>
-                <ul class="space-y-4 text-sm">
-                    <li>
-                        <a href="https://github.com/habitsfactory/habitsfactory-app" target="_blank"
-                            rel="noopener noreferrer"
-                            class="text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors font-medium flex items-center gap-2 group">
-                            <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="currentColor"
-                                viewBox="0 0 24 24">
-                                <path fill-rule="evenodd"
-                                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                            <span class="text-sm font-bold">{{ t('viewOnGithub') }}</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="https://ko-fi.com/joeydev" target="_blank"><img src="/support_me_on_kofi_dark.png"
-                                alt="Support me on Ko-Fi" style="width: 160px;"></img></a>
-                    </li>
-                    <li>
-                        <a href="mailto:contact@habitsfactory.io">
-                            <span
-                                class="text-sm text-gray-500 hover:text-primary-400 transition-colors">contact@habitsfactory.io</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-        <div class="max-w-7xl mx-auto mt-12 pt-8 border-t border-gray-300 text-center text-xs text-gray-500">
-            © {{ new Date().getFullYear() }} {{ t('appName') }}. {{ t('license') }}
-        </div>
-    </footer>
+  <footer class="mt-12 border-t border-line bg-surface/60">
+    <div class="mx-auto grid w-full max-w-6xl grid-cols-2 gap-8 px-4 py-10 text-sm sm:px-6 md:grid-cols-4">
+      <div class="col-span-2 md:col-span-1">
+        <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer"
+          class="inline-flex items-center gap-2.5 rounded-lg">
+          <img src="/logo_edition.svg" alt="" class="size-10" />
+          <span class="font-display text-xl font-bold tracking-wide text-ink uppercase">{{ t('appName') }}</span>
+        </a>
+        <p class="mt-3 max-w-xs text-ink-soft">{{ t('footerTagline') }}</p>
+      </div>
+
+      <nav :aria-label="t('management')">
+        <h3 :class="headingClass">{{ t('management') }}</h3>
+        <ul class="space-y-2">
+          <li>
+            <RouterLink to="/profile" :class="linkClass">{{ t('profile') }}</RouterLink>
+          </li>
+          <li v-if="isAdmin">
+            <RouterLink to="/admin-settings" :class="linkClass">{{ t('adminSettings') }}</RouterLink>
+          </li>
+        </ul>
+      </nav>
+
+      <nav :aria-label="t('data')">
+        <h3 :class="headingClass">{{ t('data') }}</h3>
+        <ul class="space-y-2">
+          <li>
+            <RouterLink to="/import" :class="linkClass">{{ t('importData') }}</RouterLink>
+          </li>
+          <li>
+            <RouterLink to="/export" :class="linkClass">{{ t('exportData') }}</RouterLink>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="col-span-2 md:col-span-1">
+        <h3 :class="headingClass">{{ t('support') }}</h3>
+        <ul class="space-y-2">
+          <li>
+            <a href="https://github.com/habitsfactory/habitsfactory-app" target="_blank" rel="noopener noreferrer"
+              :class="linkClass">
+              <Github :size="16" stroke-width="2.25" />
+              {{ t('viewOnGithub') }}
+            </a>
+          </li>
+          <li>
+            <a href="https://habitsfactory.io" target="_blank" rel="noopener noreferrer" :class="linkClass">
+              <Globe :size="16" stroke-width="2.25" />
+              habitsfactory.io
+            </a>
+          </li>
+          <li>
+            <a href="mailto:contact@habitsfactory.io" :class="linkClass">
+              <Mail :size="16" stroke-width="2.25" />
+              contact@habitsfactory.io
+            </a>
+          </li>
+          <li class="pt-1">
+            <a href="https://ko-fi.com/joeydev" target="_blank" rel="noopener noreferrer" class="inline-block rounded-lg">
+              <img src="/support_me_on_kofi_dark.png" alt="Support me on Ko-fi" class="h-9 w-auto" />
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="border-t border-line">
+      <p class="mx-auto w-full max-w-6xl px-4 py-4 text-center text-xs text-ink-faint sm:px-6">
+        © {{ new Date().getFullYear() }} {{ t('appName') }} · {{ t('license') }}
+      </p>
+    </div>
+  </footer>
 </template>

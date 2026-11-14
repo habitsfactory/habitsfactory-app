@@ -13,9 +13,13 @@ from .serializers import (
 )
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from .models import Habit, Completion, Category, SiteSettings, Tag, InviteLink
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.contrib.auth.models import User
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Max, Q
 from rest_framework.decorators import api_view, permission_classes
 from .models import HabitCorrelation
 
@@ -59,6 +63,10 @@ class TagViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+HABIT_TYPE_ORDER = [choice for choice, _ in Habit.TYPE_CHOICES]
+VALID_HABIT_TYPES = set(HABIT_TYPE_ORDER)
+
+
 class HabitViewSet(viewsets.ModelViewSet):
     serializer_class = HabitSerializer
     permission_classes = [IsAuthenticated]
@@ -92,14 +100,75 @@ class HabitViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_create(self, serializer):
-        # Automatically set the user when creating a habit
-        serializer.save(user=self.request.user)
+        # Automatically set the user when creating a habit; new habits go last
+        last = Habit.objects.filter(user=self.request.user).aggregate(Max("order"))
+        serializer.save(
+            user=self.request.user, order=(last["order__max"] or 0) + 1
+        )
+
+    @action(detail=False, methods=["post"])
+    def reorder(self, request):
+        """Set the display order of the user's habits.
+
+        Expects {"order": [habit_id, ...]}; habits not listed keep their position.
+        """
+        ids = request.data.get("order")
+        if not isinstance(ids, list) or not all(
+            isinstance(i, int) and not isinstance(i, bool) for i in ids
+        ):
+            return Response(
+                {"error": "order must be a list of habit ids"}, status=400
+            )
+
+        habits = {h.id: h for h in Habit.objects.filter(user=request.user, id__in=ids)}
+        updated = []
+        for position, habit_id in enumerate(ids, start=1):
+            habit = habits.get(habit_id)
+            if habit is not None:
+                habit.order = position
+                updated.append(habit)
+        Habit.objects.bulk_update(updated, ["order"])
+
+        return Response({"status": "order updated"})
+
+    @staticmethod
+    def _validate_completion_value(habit, raw):
+        """Return (Decimal value, None) or (None, error message)."""
+        if isinstance(raw, bool):
+            raw = int(raw)
+        try:
+            val = Decimal(str(raw))
+        except (InvalidOperation, ValueError):
+            return None, "value must be a number"
+
+        if not val.is_finite() or val < 0:
+            return None, "value must be a positive number"
+        # Completion.value is DecimalField(max_digits=10, decimal_places=2)
+        if val >= Decimal("100000000"):
+            return None, "value is too large"
+
+        if habit.habit_type == "boolean" and val not in (0, 1):
+            return None, "value must be 0 or 1 for a yes/no habit"
+        if habit.habit_type == "rating":
+            max_rating = habit.max_value or 5
+            if val != val.to_integral_value() or val > max_rating:
+                return None, f"value must be a whole number between 0 and {max_rating}"
+        if habit.habit_type == "percentage" and val > 100:
+            return None, "value must be between 0 and 100"
+
+        return val, None
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         habit = self.get_object()
-        val = request.data.get("value", 1)  # Default to 1 for booleans
         completion_date_str = request.data.get("date")  # Get date from request
+
+        # Default to 1 for booleans
+        val, error = self._validate_completion_value(
+            habit, request.data.get("value", 1)
+        )
+        if error:
+            return Response({"error": error}, status=400)
 
         # Parse date or use today
         if completion_date_str:
@@ -113,6 +182,13 @@ class HabitViewSet(viewsets.ModelViewSet):
                 )
         else:
             completion_date = date.today()
+
+        # The server runs in UTC, so a user ahead of UTC can legitimately be
+        # one day ahead of the server's "today" — but no further.
+        if completion_date > date.today() + timedelta(days=1):
+            return Response(
+                {"error": "Cannot log a habit for a future date"}, status=400
+            )
 
         # Update or create completion for the specified date
         completion, created = Completion.objects.update_or_create(
@@ -185,29 +261,33 @@ class HabitViewSet(viewsets.ModelViewSet):
             )
 
         # Get all habits for the user
-        habits = self.get_queryset()
+        habits = list(self.get_queryset())
+
+        # One query for every habit's completions (instead of one per habit)
+        points_by_habit = defaultdict(list)
+        completions = (
+            Completion.objects.filter(
+                habit__in=habits, date__gte=start_date, date__lte=end_date
+            )
+            .order_by("date")
+            .values("habit_id", "date", "value")
+        )
+        for completion in completions:
+            points_by_habit[completion["habit_id"]].append(
+                {
+                    "date": completion["date"].isoformat(),
+                    "value": float(completion["value"]),
+                }
+            )
 
         # Structure: { habit_type: [{ habit_name, habit_id, color, data: [{ date, value }] }] }
-        result = {"boolean": [], "counter": [], "value": [], "rating": []}
+        result = {type_name: [] for type_name in HABIT_TYPE_ORDER}
 
         for habit in habits:
-            # Get completions for this habit in the date range
-            completions = Completion.objects.filter(
-                habit=habit, date__gte=start_date, date__lte=end_date
-            ).order_by("date")
+            data_points = points_by_habit[habit.id]
 
-            # Build data points
-            data_points = []
-            for completion in completions:
-                data_points.append(
-                    {
-                        "date": completion.date.isoformat(),
-                        "value": float(completion.value),
-                    }
-                )
-
-            # Only include habits that have data
-            if data_points:
+            # Only include habits that have data (and a type the charts know)
+            if data_points and habit.habit_type in result:
                 habit_data = {
                     "habit_id": habit.id,
                     "habit_name": habit.name,
@@ -370,7 +450,9 @@ class HabitViewSet(viewsets.ModelViewSet):
             tags_created = 0
             categories_cache = {}
             tags_cache = {}
-            
+            last_order = Habit.objects.filter(user=request.user).aggregate(Max("order"))
+            next_order = (last_order["order__max"] or 0) + 1
+
             # Process each row (each row is a habit)
             for row in reader:
                 # Helper function to safely get and strip string values
@@ -383,7 +465,11 @@ class HabitViewSet(viewsets.ModelViewSet):
                 
                 # Extract habit metadata
                 habit_name = safe_get("Habit Name")
-                habit_type = safe_get("Type", "boolean")
+                # A blank or unknown type falls back to yes/no rather than
+                # storing a value the rest of the app cannot handle.
+                habit_type = safe_get("Type", "boolean").lower()
+                if habit_type not in VALID_HABIT_TYPES:
+                    habit_type = "boolean"
                 color = safe_get("Color")
                 icon = safe_get("Icon", "calendar")
                 category_name = safe_get("Category")
@@ -429,12 +515,15 @@ class HabitViewSet(viewsets.ModelViewSet):
                         "icon": icon,
                         "category": category,
                         "unit": unit,
-                        "max_value": max_value
+                        "max_value": max_value,
+                        # New habits keep the order of the file, after existing ones
+                        "order": next_order,
                     }
                 )
-                
+
                 if created:
                     habits_created += 1
+                    next_order += 1
                 else:
                     # Update existing habit
                     habit.habit_type = habit_type
@@ -566,7 +655,9 @@ class HabitViewSet(viewsets.ModelViewSet):
             )
 
         # Get all habits for the user
-        habits = self.get_queryset()
+        habits = list(
+            self.get_queryset().select_related("category").prefetch_related("tags")
+        )
 
         # Calculate number of days in range
         days_in_range = (end_date - start_date).days + 1
@@ -585,58 +676,76 @@ class HabitViewSet(viewsets.ModelViewSet):
         for c in all_completions:
             completions_by_habit[c["habit_id"]].append(c)
 
-        # Structure: { habit_type: [{ habit_name, color, metrics }] }
-        result = {"boolean": [], "counter": [], "value": [], "rating": []}
+        # The current streak can start before the range, so it needs every
+        # completion date of the yes/no habits up to the end of the range.
+        boolean_habits = [h for h in habits if h.habit_type == "boolean"]
+        dates_until_end = defaultdict(set)
+        for habit_id, completion_date in Completion.objects.filter(
+            habit__in=boolean_habits, date__lte=end_date, value__gt=0
+        ).values_list("habit_id", "date"):
+            dates_until_end[habit_id].add(completion_date)
 
+        # Structure: { habit_type: [{ habit_name, color, metrics }] }
+        result = {type_name: [] for type_name in HABIT_TYPE_ORDER}
+
+        # Habits with no entry in the range are included too (with zeroed
+        # metrics): a habit that was ignored should show as 0%, not vanish.
         for habit in habits:
+            if habit.habit_type not in result:
+                continue  # legacy rows with an invalid type
             habit_completions = completions_by_habit[habit.id]
             completion_count = len(habit_completions)
-
-            if completion_count == 0:
-                continue
+            values = [float(c["value"]) for c in habit_completions]
 
             # Calculate metrics based on habit type
             if habit.habit_type == "boolean":
-                # Pre-build a set of dates where value == 1 for O(1) lookup
-                completed_dates = {
-                    c["date"] for c in habit_completions if float(c["value"]) == 1
-                }
+                completed_dates = {c["date"] for c in habit_completions}
                 metrics = {
                     "total_completions": completion_count,
                     "completion_rate": round(
                         (completion_count / days_in_range) * 100, 1
                     ),
                     "days_in_range": days_in_range,
-                    "streak": self._calculate_streak(completed_dates, start_date, end_date),
+                    "current_streak": self._calculate_current_streak(
+                        dates_until_end[habit.id], end_date
+                    ),
+                    "best_streak": self._calculate_streak(
+                        completed_dates, start_date, end_date
+                    ),
                 }
             elif habit.habit_type == "counter":
-                values = [float(c["value"]) for c in habit_completions]
                 metrics = {
                     "total": sum(values),
                     "average": round(sum(values) / days_in_range, 1),
-                    "max": max(values),
+                    "max": max(values, default=0),
                     "days_tracked": completion_count,
                     "days_in_range": days_in_range,
                 }
             elif habit.habit_type == "value":
-                values = [float(c["value"]) for c in habit_completions]
                 metrics = {
                     "total": round(sum(values), 1),
-                    "average": round(sum(values) / len(values), 1),
-                    "max_value": round(max(values), 1),
+                    "average": round(sum(values) / len(values), 1) if values else 0,
+                    "max_value": round(max(values, default=0), 1),
                     "days_tracked": completion_count,
                     "days_in_range": days_in_range,
                     "unit": habit.unit,
                 }
             elif habit.habit_type == "rating":
-                values = [float(c["value"]) for c in habit_completions]
                 metrics = {
-                    "average": round(sum(values) / len(values), 1),
-                    "max": int(max(values)),
-                    "min": int(min(values)),
+                    "average": round(sum(values) / len(values), 1) if values else 0,
+                    "max": int(max(values, default=0)),
+                    "min": int(min(values, default=0)),
                     "days_tracked": completion_count,
                     "days_in_range": days_in_range,
                     "max_value": habit.max_value,
+                }
+            elif habit.habit_type == "percentage":
+                metrics = {
+                    "average": round(sum(values) / len(values), 1) if values else 0,
+                    "max": round(max(values, default=0), 1),
+                    "min": round(min(values, default=0), 1),
+                    "days_tracked": completion_count,
+                    "days_in_range": days_in_range,
                 }
 
             result[habit.habit_type].append(
@@ -674,6 +783,21 @@ class HabitViewSet(viewsets.ModelViewSet):
             current_date += timedelta(days=1)
         return max_streak
 
+    def _calculate_current_streak(self, completed_dates, end_date):
+        """Count the consecutive completed days leading up to end_date.
+
+        A streak is still alive if end_date itself is not done yet (the day
+        is not over), so counting then starts from the day before.
+        """
+        current_date = end_date
+        if current_date not in completed_dates:
+            current_date -= timedelta(days=1)
+        streak = 0
+        while current_date in completed_dates:
+            streak += 1
+            current_date -= timedelta(days=1)
+        return streak
+
 
 class UserInfoView(APIView):
     """
@@ -682,19 +806,53 @@ class UserInfoView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _payload(user):
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+        }
+
     def get(self, request):
+        return Response(self._payload(request.user))
+
+    def patch(self, request):
+        """Change the account's email address (the only editable field)."""
+        from allauth.account.models import EmailAddress
+
         user = request.user
-        return Response(
-            {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "is_staff": user.is_staff,
-                "is_superuser": user.is_superuser,
-            }
+        email = str(request.data.get("email") or "").strip()
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response(
+                {"email": ["Enter a valid email address."]}, status=400
+            )
+
+        taken = (
+            User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+            or EmailAddress.objects.filter(email__iexact=email)
+            .exclude(user=user)
+            .exists()
         )
+        if taken:
+            return Response(
+                {"email": ["A user with this email already exists."]}, status=400
+            )
+
+        user.email = email
+        user.save(update_fields=["email"])
+        # Login goes through allauth, which also matches its own address
+        # records: without this the old address would keep working.
+        EmailAddress.objects.filter(user=user).delete()
+        EmailAddress.objects.create(user=user, email=email, primary=True, verified=False)
+
+        return Response(self._payload(user))
 
 
 class DeleteAllUserDataView(APIView):
@@ -846,7 +1004,8 @@ class InviteLinkViewSet(viewsets.ModelViewSet):
             )
         try:
             invite = InviteLink.objects.get(token=token)
-        except (InviteLink.DoesNotExist, ValueError):
+        # A malformed token raises ValidationError (not a valid UUID)
+        except (InviteLink.DoesNotExist, ValueError, ValidationError):
             return Response({"valid": False, "detail": "Invalid invite link."})
 
         if not invite.is_valid:
@@ -1163,6 +1322,11 @@ class HabitCorrelationViewSet(viewsets.ReadOnlyModelViewSet):
             limit = max(1, min(limit, 20))
         except ValueError:
             limit = 5
+
+        if not str(habit_id).isdigit():
+            return Response(
+                {"insights": [], "count": 0, "message": "No correlations found for this habit."}
+            )
 
         # Get correlations where the habit appears in either position
         correlations = self.get_queryset().filter(

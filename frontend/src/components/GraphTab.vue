@@ -1,11 +1,17 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import api from '@/services/api'
 import { useDarkMode } from '@/composables/useDarkMode'
 import { useLanguage } from '@/composables/useLanguage'
+import { notifyError } from '@/composables/useToast'
+import { toISODate, parseISODate, addDays, daysBetween, presetRange, recentYears } from '@/utils/dates'
 import { Chart, registerables } from 'chart.js'
 import 'chartjs-adapter-date-fns'
+import { CalendarRange, ChartLine, LoaderCircle } from 'lucide-vue-next'
 import CalendarHeatmap from '@/components/CalendarHeatmap.vue'
+import UiSection from '@/components/ui/UiSection.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import { labelClass } from '@/components/ui/styles'
 
 // Register Chart.js components
 Chart.register(...registerables)
@@ -13,166 +19,88 @@ Chart.register(...registerables)
 const { isDark } = useDarkMode()
 const { t } = useLanguage()
 
+const HABIT_TYPES = ['boolean', 'counter', 'value', 'rating', 'percentage']
+
 // Graph state
 const graphStartDate = ref('')
 const graphEndDate = ref('')
-const chartInstances = ref({
-  boolean: null,
-  counter: null,
-  value: null,
-  rating: null
-})
-const graphData = ref({
-  boolean: [],
-  counter: [],
-  value: [],
-  rating: []
-})
+const graphData = ref(Object.fromEntries(HABIT_TYPES.map(type => [type, []])))
 const isLoading = ref(false)
 
-// Computed property for dynamic years
-const quickSelectYears = computed(() => {
-  const currentYear = new Date().getFullYear()
-  return [
-    currentYear,
-    currentYear - 1,
-    currentYear - 2
-  ]
-})
+// Chart instances and their canvases are kept out of Vue's reactivity on
+// purpose: Chart.js objects must not be wrapped in proxies.
+const chartInstances = {}
+const canvases = {}
+
+const chartSections = computed(() => HABIT_TYPES.map(type => ({
+  type,
+  title: t(`${type}Habits`),
+  hasData: graphData.value[type]?.length > 0,
+})))
 
 // Date range quick select options
-const dateRangeOptions = [
-  { key: 'thisWeek', label: t('thisWeek'), tooltip: t('thisWeekTooltip') },
-  { key: 'thisMonth', label: t('thisMonth'), tooltip: t('thisMonthTooltip') },
-  { key: 'last7Days', label: t('last7Days'), tooltip: t('last7DaysTooltip') },
-  { key: 'last30Days', label: t('last30Days'), tooltip: t('last30DaysTooltip') },
-  { key: 'allTime', label: t('allTime'), tooltip: t('allTimeTooltip') },
-  { key: quickSelectYears.value[0], label: quickSelectYears.value[0], tooltip: quickSelectYears.value[0] },
-  { key: quickSelectYears.value[1], label: quickSelectYears.value[1], tooltip: quickSelectYears.value[1] },
-  { key: quickSelectYears.value[2], label: quickSelectYears.value[2], tooltip: quickSelectYears.value[2] },
-]
+const dateRangeOptions = computed(() => [
+  ...['thisWeek', 'thisMonth', 'last7Days', 'last30Days', 'allTime'].map(key => ({
+    key,
+    label: t(key),
+    tooltip: t(`${key}Tooltip`),
+  })),
+  ...recentYears().map(year => ({ key: String(year), label: String(year), tooltip: String(year) })),
+])
 
-// Set date range based on quick select option
-const setDateRangeOption = (optionKey) => {
-  // Handle allTime separately since it's async
-  if (optionKey === 'allTime') {
-    setAllDataRange()
-    return
-  }
-
-  let endDate = new Date()
-  let startDate = new Date()
-
-  switch (optionKey) {
-    case 'thisWeek': {
-      // Start from Monday of current week
-      const day = startDate.getDay()
-      const diff = day === 0 ? 6 : day - 1 // Adjust for Sunday
-      startDate.setDate(startDate.getDate() - diff)
-      break
-    }
-    case 'thisMonth': {
-      // Start from first day of current month
-      startDate.setDate(1)
-      break
-    }
-    case 'last7Days': {
-      startDate.setDate(startDate.getDate() - 6) // -6 to include today
-      break
-    }
-    case 'last30Days': {
-      startDate.setDate(startDate.getDate() - 29) // -29 to include today
-      break
-    }
-    default: {
-      // Handle year selection
-      const year = parseInt(optionKey)
-      if (!isNaN(year)) {
-        startDate = new Date(year, 0, 1)
-        endDate = new Date(year, 11, 31)
-      }
-      break
-    }
-  }
-
-  startDate.setHours(0, 0, 0, 0)
-
-  graphStartDate.value = startDate.toISOString().split('T')[0]
-  graphEndDate.value = endDate.toISOString().split('T')[0]
-}
-
-// Helper function to fill missing dates with 0 values
-const fillMissingDates = (data) => {
-  if (!data || data.length === 0) return data
-  // Fill missing dates for each habit
-  return data.map(habitData => {
-    if (!habitData.data || habitData.data.length === 0) {
-      return habitData
-    }
-
-    // Find the min and max dates where this habit has actual data
-    const dates = habitData.data.map(point => point.date).sort()
-    const minDataDate = dates[0]
-    const maxDataDate = dates[dates.length - 1]
-
-    // Create a map of existing data points
-    const dataMap = new Map()
-    habitData.data.forEach(point => {
-      dataMap.set(point.date, point.value)
-    })
-
-    // Generate dates only between min and max data dates
-    const filledData = []
-    const current = new Date(minDataDate)
-    const end = new Date(maxDataDate)
-
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0]
-      filledData.push({
-        date: dateStr,
-        value: dataMap.get(dateStr) || 0
-      })
-      current.setDate(current.getDate() + 1)
-    }
-
-    return {
-      ...habitData,
-      data: filledData
-    }
-  })
-}
-
-// Initialize date range for graphs (default: current month)
-const initializeDateRange = () => {
-  const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  graphStartDate.value = startOfMonth.toISOString().split('T')[0]
-  graphEndDate.value = now.toISOString().split('T')[0]
-}
-
-// Set date range to entire year
-const setYearRange = (year) => {
-  graphStartDate.value = `${year}-01-01`
-  graphEndDate.value = `${year}-12-31`
+const setRange = (start, end) => {
+  graphStartDate.value = start
+  graphEndDate.value = end
 }
 
 // Set date range to all available data
 const setAllDataRange = async () => {
+  const today = toISODate()
   try {
     const response = await api.get('habits/date_range/')
     if (response.data.start_date && response.data.end_date) {
-      graphStartDate.value = response.data.start_date
-      graphEndDate.value = response.data.end_date
+      setRange(response.data.start_date, response.data.end_date)
     } else {
-      // Fallback if no data available
-      graphStartDate.value = new Date().toISOString().split('T')[0]
-      graphEndDate.value = new Date().toISOString().split('T')[0]
+      setRange(today, today)
     }
   } catch (err) {
-    // Fallback on error
-    graphStartDate.value = '2020-01-01'
-    graphEndDate.value = new Date().toISOString().split('T')[0]
+    setRange('2020-01-01', today)
   }
+}
+
+// Set date range based on quick select option
+const setDateRangeOption = (optionKey) => {
+  if (optionKey === 'allTime') {
+    setAllDataRange()
+    return
+  }
+  const { start, end } = presetRange(optionKey)
+  setRange(toISODate(start), toISODate(end))
+}
+
+// A day without an entry means "0" for yes/no and counter habits, but
+// "not measured" for values and ratings (an unlogged night is not 0 h of sleep)
+const EMPTY_DAY_VALUE = { boolean: 0, counter: 0, value: null, rating: null, percentage: null }
+
+// Fill the gaps between a habit's first and last data point. Null points
+// leave a gap in the line (see `spanGaps` below).
+const fillMissingDates = (data, type) => {
+  const empty = EMPTY_DAY_VALUE[type]
+  return (data || []).map(habitData => {
+    if (!habitData.data || habitData.data.length === 0) return habitData
+
+    const dates = habitData.data.map(point => point.date).sort()
+    const dataMap = new Map(habitData.data.map(point => [point.date, point.value]))
+
+    const filledData = []
+    const end = parseISODate(dates[dates.length - 1])
+    for (let current = parseISODate(dates[0]); current <= end; current = addDays(current, 1)) {
+      const dateStr = toISODate(current)
+      filledData.push({ date: dateStr, value: dataMap.get(dateStr) ?? empty })
+    }
+
+    return { ...habitData, data: filledData }
+  })
 }
 
 // Fetch graph data from API
@@ -188,350 +116,221 @@ const fetchGraphData = async () => {
       }
     })
 
-    // Fill missing dates with 0 for each habit type
-    graphData.value = {
-      boolean: fillMissingDates(response.data.boolean || []),
-      counter: fillMissingDates(response.data.counter || []),
-      value: fillMissingDates(response.data.value || []),
-      rating: fillMissingDates(response.data.rating || [])
-    }
+    graphData.value = Object.fromEntries(
+      HABIT_TYPES.map(type => [type, fillMissingDates(response.data[type], type)])
+    )
 
     await renderCharts()
   } catch (err) {
+    notifyError(err, 'loadFailed')
   } finally {
     isLoading.value = false
   }
 }
 
+const destroyCharts = () => {
+  HABIT_TYPES.forEach(type => {
+    chartInstances[type]?.destroy()
+    chartInstances[type] = null
+  })
+}
+
+// Charts take their colors from the theme tokens defined in assets/main.css
+const themeColor = (name) =>
+  getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim()
+
 // Render all charts
 const renderCharts = async () => {
   // Ensure DOM is fully updated before accessing canvas elements
   await nextTick()
+  destroyCharts()
 
-  const habitTypes = ['boolean', 'counter', 'value', 'rating']
+  const colors = {
+    ink: themeColor('ink'),
+    soft: themeColor('ink-soft'),
+    line: themeColor('line'),
+    surface: themeColor('surface'),
+  }
+  const fontFamily = getComputedStyle(document.body).fontFamily
 
-  habitTypes.forEach(type => {
+  HABIT_TYPES.forEach(type => {
     const data = graphData.value[type] || []
+    const canvas = canvases[type]
+    if (data.length === 0 || !canvas) return
 
-    // Destroy existing chart first
-    if (chartInstances.value[type]) {
-      try {
-        chartInstances.value[type].destroy()
-      } catch (e) {
-        // Ignore destroy errors
-      }
-      chartInstances.value[type] = null
-    }
-
-    // Skip if no data
-    if (data.length === 0) return
-
-    const canvasId = `chart-${type}`
-    const canvas = document.getElementById(canvasId)
-
-    if (!canvas) {
-      return
-    }
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) {
-      return
-    }
-
-    // Prepare datasets - one per habit
+    // One dataset per habit
     const datasets = data.map(habitData => ({
       label: habitData.habit_name,
       data: habitData.data.map(d => ({ x: d.date, y: d.value })),
       borderColor: habitData.color,
       backgroundColor: habitData.color + '20',
-      tension: 0.3,
-      fill: type === 'boolean' ? false : true,
-      pointRadius: 4,
+      borderWidth: 2,
+      // Monotone curves never overshoot the data (no dipping below 0 / above 1)
+      cubicInterpolationMode: 'monotone',
+      fill: type !== 'boolean',
+      pointRadius: 3,
       pointHoverRadius: 6,
       spanGaps: false
     }))
 
-    try {
-      chartInstances.value[type] = new Chart(ctx, {
-        type: 'line',
-        data: { datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: {
-            mode: 'x',
-            intersect: false,
-          },
-          plugins: {
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                color: isDark.value ? '#a8a29e' : '#57534e',
-                font: {
-                  family: 'system-ui',
-                  weight: 'bold'
-                },
-                padding: 15,
-                usePointStyle: true,
-                pointStyle: 'circle'
-              }
-            },
-            tooltip: {
-              backgroundColor: isDark.value ? '#292524' : '#ffffff',
-              titleColor: isDark.value ? '#fafaf9' : '#1c1917',
-              bodyColor: isDark.value ? '#a8a29e' : '#57534e',
-              borderColor: isDark.value ? '#44403c' : '#d6d3d1',
-              borderWidth: 1,
-              padding: 12,
-              displayColors: true,
-              callbacks: {
-                label: function (context) {
-                  let label = context.dataset.label || '';
-                  if (label) {
-                    label += ': ';
-                  }
-                  if (context.parsed.y !== null) {
-                    label += context.parsed.y;
-                  }
-                  return label;
-                }
-              }
+    chartInstances[type] = new Chart(canvas, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'x',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: colors.soft,
+              font: { family: fontFamily, weight: 600 },
+              padding: 15,
+              usePointStyle: true,
+              pointStyle: 'circle'
             }
           },
-          scales: {
-            x: {
-              type: 'time',
-              time: {
-                unit: 'day',
-                displayFormats: {
-                  day: 'MMM d'
-                }
-              },
-              grid: {
-                color: isDark.value ? '#44403c' : '#d6d3d1'
-              },
-              ticks: {
-                color: isDark.value ? '#a8a29e' : '#57534e',
-                font: {
-                  weight: '600'
-                }
-              }
+          tooltip: {
+            backgroundColor: colors.surface,
+            titleColor: colors.ink,
+            bodyColor: colors.soft,
+            borderColor: colors.line,
+            borderWidth: 1,
+            padding: 12,
+            titleFont: { family: fontFamily },
+            bodyFont: { family: fontFamily },
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              displayFormats: { day: 'MMM d' }
             },
-            y: {
-              beginAtZero: true,
-              grace: '5%',
-              grid: {
-                color: isDark.value ? '#44403c' : '#d6d3d1'
-              },
-              ticks: {
-                color: isDark.value ? '#a8a29e' : '#57534e',
-                font: {
-                  weight: '600'
-                }
-              }
+            grid: { color: colors.line },
+            border: { color: colors.line },
+            ticks: {
+              color: colors.soft,
+              font: { family: fontFamily, weight: 500 }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            // Scores always use the full 0-100 scale
+            ...(type === 'percentage' ? { max: 100 } : { grace: '5%' }),
+            grid: { color: colors.line },
+            border: { color: colors.line },
+            ticks: {
+              color: colors.soft,
+              font: { family: fontFamily, weight: 500 }
             }
           }
         }
-      })
-    } catch (e) {
-    }
+      }
+    })
   })
 }
 
-// Get user's timezone
-const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-// Helper to parse YYYY-MM-DD string as local date (not UTC)
-const parseLocalDate = (dateStr) => {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  // Create date at noon to avoid any DST edge cases
-  return new Date(year, month - 1, day, 12, 0, 0)
-}
-
-// Helper to format date as YYYY-MM-DD from local date
-const formatDateStr = (date) => {
-  // Use Intl.DateTimeFormat with user's timezone for consistent formatting
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: userTimeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-  return formatter.format(date)
-}
-
-// Computed property to prepare heatmap data for boolean habits
-// Fills all dates in the selected range (not just dates with data)
+// Heatmap data for boolean habits: every day of the selected range
 const booleanHeatmapData = computed(() => {
-  if (!graphData.value.boolean || graphData.value.boolean.length === 0) {
-    return []
-  }
+  if (!graphData.value.boolean?.length || !graphStartDate.value || !graphEndDate.value) return []
 
-  if (!graphStartDate.value || !graphEndDate.value) {
-    return []
-  }
+  const start = parseISODate(graphStartDate.value)
+  const end = parseISODate(graphEndDate.value)
 
   return graphData.value.boolean.map(habit => {
-    // Create a map of existing data points
-    const dataMap = new Map()
-    habit.data.forEach(point => {
-      dataMap.set(point.date, point.value)
-    })
+    const dataMap = new Map(habit.data.map(point => [point.date, point.value]))
 
-    // Generate all dates in the selected range
     const filledData = []
-    const current = parseLocalDate(graphStartDate.value)
-    const end = parseLocalDate(graphEndDate.value)
-
-    while (current <= end) {
-      const dateStr = formatDateStr(current)
-      filledData.push({
-        date: dateStr,
-        value: dataMap.get(dateStr) || 0
-      })
-      current.setDate(current.getDate() + 1)
+    for (let current = start; current <= end; current = addDays(current, 1)) {
+      const dateStr = toISODate(current)
+      filledData.push({ date: dateStr, value: dataMap.get(dateStr) || 0 })
     }
 
-    return {
-      habit_name: habit.habit_name,
-      color: habit.color,
-      data: filledData
-    }
+    return { habit_name: habit.habit_name, color: habit.color, data: filledData }
   })
 })
 
-// Watch for date changes
+// Long ranges need the full width; short ones fit several per row
+const wideHeatmaps = computed(() => {
+  if (!graphStartDate.value || !graphEndDate.value) return false
+  return daysBetween(parseISODate(graphStartDate.value), parseISODate(graphEndDate.value)) > 120
+})
+
+// Refetch when the range changes
 watch([graphStartDate, graphEndDate], () => {
   fetchGraphData()
 })
 
-// Watch for dark mode changes to update charts
-watch(isDark, async () => {
-  await renderCharts()
-})
+// Redraw with the new palette when the theme changes
+watch(isDark, () => renderCharts())
 
-// Expose fetchGraphData so parent can trigger it when tab becomes active
+// Exposed so the parent can refresh when the tab becomes active
 defineExpose({ fetchGraphData })
 
 onMounted(() => {
-  initializeDateRange()
-  fetchGraphData()
+  // Default range: current month (the watcher above triggers the fetch)
+  setDateRangeOption('thisMonth')
 })
+
+onBeforeUnmount(destroyCharts)
 </script>
 
 <template>
   <div class="space-y-6">
-    <!-- Date Range Selector -->
-    <div
-      class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-      <h2 class="text-2xl font-black text-neutral-900 dark:text-white mb-6">{{ t('dateRange') }}</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div class="space-y-2">
-          <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('startDate') }}</label>
-          <input v-model="graphStartDate" type="date"
-            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{ t('endDate') }}</label>
-          <input v-model="graphEndDate" type="date"
-            class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-2xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
-        </div>
+    <!-- Date range -->
+    <UiSection :title="t('dateRange')" :icon="CalendarRange">
+      <template #actions>
+        <LoaderCircle v-if="isLoading" :size="20" class="animate-spin text-primary-500" />
+      </template>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <UiInput v-model="graphStartDate" type="date" :label="t('startDate')" :max="graphEndDate || undefined" />
+        <UiInput v-model="graphEndDate" type="date" :label="t('endDate')" :min="graphStartDate || undefined" />
       </div>
 
-      <!-- Quick Select Buttons -->
-      <div class="pt-4 border-t border-neutral-100 dark:border-neutral-700">
-        <p class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2 mb-3">Quick Select</p>
-        <div class="flex gap-3 flex-wrap">
-          <button v-for="option in dateRangeOptions" :key="option.key" @click="setDateRangeOption(option.key)"
-            :title="option.tooltip"
-            class="px-6 py-2.5 bg-neutral-100 dark:bg-neutral-700 text-neutral-900 dark:text-white rounded-xl font-bold text-sm hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all shadow-sm active:scale-95">
+      <div class="mt-5 border-t border-line pt-4">
+        <span :class="labelClass">{{ t('quickSelect') }}</span>
+        <div class="flex flex-wrap gap-2">
+          <button v-for="option in dateRangeOptions" :key="option.key" type="button" :title="option.tooltip"
+            class="inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-sm font-medium text-ink-soft transition-colors hover:border-primary-500 hover:text-primary-700 dark:hover:text-primary-300"
+            @click="setDateRangeOption(option.key)">
             {{ option.label }}
           </button>
         </div>
       </div>
-    </div>
+    </UiSection>
 
-    <!-- Loading Indicator -->
-    <div v-if="isLoading" class="flex justify-center items-center py-12">
-      <svg class="animate-spin h-10 w-10 text-primary-500" xmlns="http://www.w3.org/2000/svg" fill="none"
-        viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-        </path>
-      </svg>
-    </div>
-
-    <!-- Boolean Habits Heatmaps -->
-    <div v-if="booleanHeatmapData.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="habit in booleanHeatmapData" :key="habit.habit_name"
-        class="bg-white dark:bg-neutral-800 rounded-4xl p-6 shadow-lg border border-neutral-100 dark:border-neutral-700">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: habit.color }">
-          </div>
-          <h3 class="text-lg font-black text-neutral-900 dark:text-white uppercase tracking-tight">
-            {{ habit.habit_name }}
-          </h3>
+    <!-- Boolean habits calendars -->
+    <div v-if="booleanHeatmapData.length > 0"
+      :class="['grid grid-cols-1 gap-4', !wideHeatmaps && 'md:grid-cols-2 lg:grid-cols-3']">
+      <section v-for="habit in booleanHeatmapData" :key="habit.habit_name" :style="{ '--habit': habit.color }"
+        class="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+        <div class="mb-3 flex items-center gap-2.5">
+          <span class="size-3 shrink-0 rounded-full bg-(--habit)"></span>
+          <h3 class="truncate font-semibold text-ink">{{ habit.habit_name }}</h3>
         </div>
-        <div class="overflow-x-auto">
-          <CalendarHeatmap :data="habit.data" :color="habit.color" :square-size="14" :gap="3" :border-radius="3" />
+        <div class="overflow-x-auto pb-1">
+          <CalendarHeatmap :data="habit.data" :color="habit.color" />
         </div>
-      </div>
+      </section>
     </div>
 
-    <!-- Boolean Habits Chart -->
-    <div
-      class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-      <h3 class="text-xl font-black text-neutral-900 dark:text-white mb-6 uppercase tracking-tight">{{
-        t('booleanHabits') }}
-      </h3>
-      <div class="h-80 flex items-center justify-center" v-if="!graphData.boolean || graphData.boolean.length === 0">
-        <p class="text-neutral-400 dark:text-neutral-500 font-medium text-lg">{{ t('noData') }}</p>
+    <!-- One chart per habit type -->
+    <UiSection v-for="section in chartSections" :key="section.type" :title="section.title" :icon="ChartLine">
+      <!-- The canvas stays mounted so Chart.js can attach to it -->
+      <div v-show="section.hasData" class="h-80">
+        <canvas :ref="el => { canvases[section.type] = el }"></canvas>
       </div>
-      <div class="h-80" v-else>
-        <canvas id="chart-boolean"></canvas>
-      </div>
-    </div>
-
-    <!-- Counter Habits Chart -->
-    <div
-      class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-      <h3 class="text-xl font-black text-neutral-900 dark:text-white mb-6 uppercase tracking-tight">{{
-        t('counterHabits') }}
-      </h3>
-      <div class="h-80 flex items-center justify-center" v-if="!graphData.counter || graphData.counter.length === 0">
-        <p class="text-neutral-400 dark:text-neutral-500 font-medium text-lg">{{ t('noData') }}</p>
-      </div>
-      <div class="h-80" v-else>
-        <canvas id="chart-counter"></canvas>
-      </div>
-    </div>
-
-    <!-- Value Habits Chart -->
-    <div
-      class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-      <h3 class="text-xl font-black text-neutral-900 dark:text-white mb-6 uppercase tracking-tight">{{
-        t('valueHabits') }}</h3>
-      <div class="h-80 flex items-center justify-center" v-if="!graphData.value || graphData.value.length === 0">
-        <p class="text-neutral-400 dark:text-neutral-500 font-medium text-lg">{{ t('noData') }}</p>
-      </div>
-      <div class="h-80" v-else>
-        <canvas id="chart-value"></canvas>
-      </div>
-    </div>
-
-    <!-- Rating Habits Chart -->
-    <div
-      class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-      <h3 class="text-xl font-black text-neutral-900 dark:text-white mb-6 uppercase tracking-tight">{{
-        t('ratingHabits') }}</h3>
-      <div class="h-80 flex items-center justify-center" v-if="!graphData.rating || graphData.rating.length === 0">
-        <p class="text-neutral-400 dark:text-neutral-500 font-medium text-lg">{{ t('noData') }}</p>
-      </div>
-      <div class="h-80" v-else>
-        <canvas id="chart-rating"></canvas>
-      </div>
-    </div>
+      <p v-if="!section.hasData" class="flex h-32 items-center justify-center text-sm font-medium text-ink-faint">
+        {{ t('noData') }}
+      </p>
+    </UiSection>
   </div>
 </template>

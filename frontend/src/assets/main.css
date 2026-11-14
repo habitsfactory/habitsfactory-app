@@ -1,2 +1,96 @@
 @import "tailwindcss";
-@variant dark (&:where(.dark, .dark *));
+
+/* Class-based dark mode: `.dark` on <html> (see composables/useDarkMode.js). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens.
+ * Semantic colors (canvas / surface / ink / line) flip automatically in dark
+ * mode, so components use `bg-surface text-ink border-line` with no `dark:`
+ * duplicates. `static` keeps every variable in the output so JS (charts) can
+ * read them too.
+ */
+@theme static {
+  /* Brand — taken from the logo */
+  --color-primary-50: #eef8fc;
+  --color-primary-100: #d5eef8;
+  --color-primary-200: #b0def2;
+  --color-primary-300: #7ac6e8;
+  --color-primary-400: #3dabd9;
+  --color-primary-500: #1490c9;
+  --color-primary-600: #1177a8;
+  --color-primary-700: #135f89;
+  --color-primary-800: #155071;
+  --color-primary-900: #16435e;
+  --color-primary-950: #0e2b3f;
+
+  /* Surfaces & text (light) */
+  --color-canvas: #f2f4f6;
+  --color-surface: #ffffff;
+  --color-sunken: #edf0f3;
+  --color-line: #dce1e6;
+  --color-line-strong: #c1c9d1;
+  --color-ink: #121a20;
+  --color-ink-soft: #4d5b66;
+  --color-ink-faint: #73818d;
+}
+
+@theme {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
+
+  --animate-marquee-left: marquee-left 70s linear infinite;
+  --animate-marquee-right: marquee-right 70s linear infinite;
+
+  @keyframes marquee-left {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes marquee-right {
+    from {
+      transform: translateX(-50%);
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+}
+
+@layer base {
+  .dark {
+    color-scheme: dark;
+
+    --color-canvas: #0c1114;
+    --color-surface: #141b20;
+    --color-sunken: #1b242a;
+    --color-line: #26313a;
+    --color-line-strong: #384752;
+    --color-ink: #edf2f5;
+    --color-ink-soft: #a2b0bb;
+    --color-ink-faint: #71808c;
+  }
+
+  body {
+    @apply min-h-dvh bg-canvas font-sans text-ink antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary-500;
+  }
+
+  ::selection {
+    @apply bg-primary-500/25;
+  }
+}

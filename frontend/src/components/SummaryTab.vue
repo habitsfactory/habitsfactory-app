@@ -2,254 +2,97 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useLanguage } from '@/composables/useLanguage'
+import { notifyError } from '@/composables/useToast'
 import { useCategories } from '@/composables/useCategories'
-import * as LucideIcons from 'lucide-vue-next'
-import { RefreshCw, GripVertical } from 'lucide-vue-next'
+import { useCategoryDrag } from '@/composables/useCategoryDrag'
+import { useCookies } from '@/composables/useCookies'
+import { toISODate, presetRange, daysBetween } from '@/utils/dates'
+import { Flame, ChartNoAxesColumn, Star, Trophy } from 'lucide-vue-next'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmptyState from '@/components/ui/UiEmptyState.vue'
+import UiStat from '@/components/ui/UiStat.vue'
+import HabitIcon from '@/components/habits/HabitIcon.vue'
+import TagChip from '@/components/habits/TagChip.vue'
+import CategoryHeader from '@/components/habits/CategoryHeader.vue'
 
 const { t } = useLanguage()
-const { categories, categoryOrder, fetchCategories, saveLayoutToServer } = useCategories()
+const { fetchCategories, groupByCategory } = useCategories()
+const { draggedId, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, moveGroup } = useCategoryDrag()
+const { setCookie, getCookie } = useCookies()
 
-// Cookie helpers
 const COOKIE_NAME = 'summaryDateRange'
+const RANGE_KEYS = ['thisWeek', 'thisMonth', 'last7Days', 'last30Days']
 
-const getCookie = (name) => {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
+// Date range options (computed so labels follow the language)
+const dateRangeOptions = computed(() => RANGE_KEYS.map(key => ({
+  value: key,
+  label: t(key),
+  title: t(`${key}Tooltip`),
+})))
 
-const setCookie = (name, value, days = 365) => {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString()
-  document.cookie = `${name}=${value}; expires=${expires}; path=/`
-}
-
-// Date range options
-const dateRangeOptions = [
-  { key: 'thisWeek', label: t('thisWeek'), tooltip: t('thisWeekTooltip') },
-  { key: 'thisMonth', label: t('thisMonth'), tooltip: t('thisMonthTooltip') },
-  { key: 'last7Days', label: t('last7Days'), tooltip: t('last7DaysTooltip') },
-  { key: 'last30Days', label: t('last30Days'), tooltip: t('last30DaysTooltip') }
-]
-
-const validRangeKeys = dateRangeOptions.map(o => o.key)
 const savedRange = getCookie(COOKIE_NAME)
-const selectedRange = ref(validRangeKeys.includes(savedRange) ? savedRange : 'last30Days')
+const selectedRange = ref(RANGE_KEYS.includes(savedRange) ? savedRange : 'last30Days')
 
 // Summary state
-const summaryData = ref({
-  boolean: [],
-  counter: [],
-  value: [],
-  rating: []
-})
-const isFetchingSummary = ref(false)
-const summaryDays = ref(30)
+const HABIT_TYPES = ['boolean', 'counter', 'value', 'rating', 'percentage']
 
-// Dragging for categories
-const draggedCategoryId = ref(null)
-const dragOverCategoryId = ref(null)
+const summaryData = ref(Object.fromEntries(HABIT_TYPES.map(type => [type, []])))
+const isFetchingSummary = ref(false)
+const hasLoaded = ref(false)
+
+const summaryDays = computed(() => {
+  const { start, end } = presetRange(selectedRange.value)
+  return daysBetween(start, end)
+})
 
 // Combine all habits and group by category
-const groupedHabits = computed(() => {
-  const allHabits = [
-    ...summaryData.value.boolean.map(h => ({ ...h, habit_type: 'boolean' })),
-    ...summaryData.value.counter.map(h => ({ ...h, habit_type: 'counter' })),
-    ...summaryData.value.value.map(h => ({ ...h, habit_type: 'value' })),
-    ...summaryData.value.rating.map(h => ({ ...h, habit_type: 'rating' }))
-  ]
+const allHabits = computed(() =>
+  HABIT_TYPES.flatMap(type =>
+    summaryData.value[type].map(h => ({ ...h, habit_type: type }))
+  )
+)
 
-  if (allHabits.length === 0) return []
-
-  const groups = []
-  const categoryMap = new Map()
-  categories.value.forEach(cat => {
-    categoryMap.set(cat.id, cat)
-  })
-
-  const uncategorized = allHabits.filter(h => !h.category_id)
-  const hasUncategorized = uncategorized.length > 0
-
-  let orderedCategoryIds
-  if (categoryOrder.value && categoryOrder.value.length > 0) {
-    orderedCategoryIds = [...categoryOrder.value]
-  } else {
-    orderedCategoryIds = hasUncategorized
-      ? ['uncategorized', ...categories.value.map(c => c.id)]
-      : categories.value.map(c => c.id)
-  }
-
-  orderedCategoryIds.forEach(id => {
-    if (id === 'uncategorized') {
-      if (hasUncategorized) {
-        groups.push({
-          id: 'uncategorized',
-          name: t('uncategorized'),
-          habits: uncategorized
-        })
-      }
-    } else {
-      const cat = categoryMap.get(id)
-      if (cat) {
-        const categoryHabits = allHabits.filter(h => h.category_id === cat.id)
-        if (categoryHabits.length > 0) {
-          groups.push({
-            id: cat.id,
-            name: cat.name,
-            habits: categoryHabits
-          })
-        }
-      }
-    }
-  })
-
-  return groups
-})
-
-// Check if there's any data
-const hasAnyData = computed(() => {
-  return summaryData.value.boolean.length > 0 ||
-    summaryData.value.counter.length > 0 ||
-    summaryData.value.value.length > 0 ||
-    summaryData.value.rating.length > 0
-})
-
-// Get icon component from name
-const getIcon = (iconName) => {
-  if (!iconName) return LucideIcons.Calendar
-  const pascalCase = iconName
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('')
-  return LucideIcons[pascalCase] || LucideIcons.Calendar
-}
-
-// Drag handlers
-const handleDragStart = (e, categoryId) => {
-  draggedCategoryId.value = categoryId
-  e.dataTransfer.effectAllowed = 'move'
-  e.dataTransfer.setData('text/html', e.target.innerHTML)
-  e.target.style.opacity = '0.4'
-}
-
-const handleDragEnd = (e) => {
-  e.target.style.opacity = '1'
-  draggedCategoryId.value = null
-  dragOverCategoryId.value = null
-}
-
-const handleDragOver = (e, categoryId) => {
-  e.preventDefault()
-  e.dataTransfer.dropEffect = 'move'
-  dragOverCategoryId.value = categoryId
-  return false
-}
-
-const handleDragEnter = (e, categoryId) => {
-  e.preventDefault()
-  dragOverCategoryId.value = categoryId
-}
-
-const handleDragLeave = (e) => {
-  if (e.target.classList && e.target.classList.contains('category-group')) {
-    dragOverCategoryId.value = null
-  }
-}
-
-const handleDrop = (e, targetCategoryId) => {
-  e.stopPropagation()
-  e.preventDefault()
-
-  if (!draggedCategoryId.value || draggedCategoryId.value === targetCategoryId) {
-    dragOverCategoryId.value = null
-    return
-  }
-
-  const newOrder = [...categoryOrder.value]
-  const draggedIndex = newOrder.indexOf(draggedCategoryId.value)
-  const targetIndex = newOrder.indexOf(targetCategoryId)
-
-  if (draggedIndex !== -1 && targetIndex !== -1) {
-    newOrder.splice(draggedIndex, 1)
-    const insertIndex = draggedIndex < targetIndex ? targetIndex : targetIndex
-    newOrder.splice(insertIndex, 0, draggedCategoryId.value)
-    categoryOrder.value = newOrder
-    saveLayoutToServer()
-  }
-
-  draggedCategoryId.value = null
-  dragOverCategoryId.value = null
-  return false
-}
-
-// Calculate date range based on selected option
-const getDateRange = () => {
-  const endDate = new Date()
-  const startDate = new Date()
-
-  switch (selectedRange.value) {
-    case 'thisWeek': {
-      // Start from Monday of current week
-      const day = startDate.getDay()
-      const diff = day === 0 ? 6 : day - 1 // Adjust for Sunday
-      startDate.setDate(startDate.getDate() - diff)
-      break
-    }
-    case 'thisMonth': {
-      // Start from first day of current month
-      startDate.setDate(1)
-      break
-    }
-    case 'last7Days': {
-      startDate.setDate(startDate.getDate() - 6) // -6 to include today
-      break
-    }
-    case 'last30Days':
-    default: {
-      startDate.setDate(startDate.getDate() - 29) // -29 to include today
-      break
-    }
-  }
-
-  // Reset time to start of day for startDate
-  startDate.setHours(0, 0, 0, 0)
-
-  return { startDate, endDate }
-}
+const groupedHabits = computed(() =>
+  groupByCategory(allHabits.value, h => h.category_id ?? null, t('uncategorized'))
+)
 
 // Fetch summary data from API
 const fetchSummaryData = async () => {
   isFetchingSummary.value = true
   try {
-    const { startDate, endDate } = getDateRange()
-
-    // Calculate number of days in range
-    summaryDays.value = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
-
+    const { start, end } = presetRange(selectedRange.value)
     const response = await api.get('habits/summary/', {
       params: {
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0]
+        start_date: toISODate(start),
+        end_date: toISODate(end)
       }
     })
-    summaryData.value = {
-      boolean: response.data.boolean || [],
-      counter: response.data.counter || [],
-      value: response.data.value || [],
-      rating: response.data.rating || []
-    }
+    summaryData.value = Object.fromEntries(HABIT_TYPES.map(type => [type, response.data[type] || []]))
   } catch (err) {
+    notifyError(err, 'loadFailed')
   } finally {
     isFetchingSummary.value = false
+    hasLoaded.value = true
   }
 }
 
-// Handle date range change
-const onRangeChange = (rangeKey) => {
-  selectedRange.value = rangeKey
-  setCookie(COOKIE_NAME, rangeKey)
-  fetchSummaryData()
-}
+// Caption under the headline figure of the non yes/no cards
+const summaryLabels = { rating: 'averageRating', percentage: 'averageScore' }
 
-// Expose fetchSummaryData so parent can trigger it when tab becomes active
+// Averages and extremes mean nothing for a habit with no entry in the range
+const measured = (habit, value) => (habit.metrics.days_tracked > 0 ? value : '–')
+
+const range = computed({
+  get: () => selectedRange.value,
+  set: (key) => {
+    selectedRange.value = key
+    setCookie(COOKIE_NAME, key)
+    fetchSummaryData()
+  },
+})
+
+// Exposed so the parent can refresh when the tab becomes active
 defineExpose({ fetchSummaryData })
 
 onMounted(() => {
@@ -261,218 +104,126 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="bg-linear-to-r from-primary-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
-      <div class="flex justify-between items-center mb-2">
-        <div>
-          <h2 class="text-3xl font-black text-white mb-2">{{ t('summaryView') }}</h2>
-          <p class="text-primary-100 font-medium">{{ t('retrospectiveAnalysis') }}</p>
-          <!-- Date Range Selector -->
-          <div class="pt-2 flex flex-wrap gap-2">
-            <button v-for="option in dateRangeOptions" :key="option.key" @click="onRangeChange(option.key)"
-              :title="option.tooltip" :class="[
-                'rounded-xl font-bold text-sm transition-all',
-                selectedRange === option.key
-                  ? 'bg-white text-primary-600 shadow-lg'
-                  : 'bg-primary-700/50 text-primary-100 hover:bg-primary-700'
-              ]">
-              {{ option.label }}
-            </button>
-          </div>
+    <section
+      class="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary-600 to-primary-950 p-5 text-white shadow-md sm:p-6">
+      <ChartNoAxesColumn :size="180" stroke-width="1.5"
+        class="pointer-events-none absolute -right-6 -bottom-10 text-white/10" />
+      <div class="relative flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0">
+          <h2 class="font-display text-3xl font-bold tracking-wide uppercase">{{ t('summaryView') }}</h2>
+          <p class="mt-1 text-sm text-primary-100">{{ t('retrospectiveAnalysis') }}</p>
+          <UiSegmented v-model="range" :options="dateRangeOptions" tone="inverse" class="mt-4" />
         </div>
-
-
         <div class="text-right">
-          <p class="text-5xl font-black text-white">{{ summaryDays }}</p>
-          <p class="text-primary-100 font-bold uppercase tracking-wide">{{ t('days') }}</p>
+          <p class="font-display text-6xl leading-none font-bold tabular-nums">{{ summaryDays }}</p>
+          <p class="text-xs font-semibold tracking-wider text-primary-100 uppercase">{{ t('days') }}</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Loading State -->
-    <div v-if="isFetchingSummary" class="flex items-center justify-center py-20">
-      <RefreshCw :size="40" class="animate-spin text-primary-500" />
-    </div>
+    <UiSpinner v-if="isFetchingSummary && !hasLoaded" />
 
-    <!-- Summary Content -->
-    <div v-else class="space-y-6">
-      <!-- Category Groups -->
-      <div v-for="group in groupedHabits" :key="group.id" class="space-y-4 category-group"
-        :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-primary-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
-        @dragover="handleDragOver($event, group.id)" @dragenter="handleDragEnter($event, group.id)"
-        @dragleave="handleDragLeave" @drop="handleDrop($event, group.id)">
+    <div v-else :class="['flex flex-col gap-6 transition-opacity', isFetchingSummary && 'opacity-60']">
+      <section v-for="(group, index) in groupedHabits" :key="group.id" :class="[
+        '-m-2 space-y-3 rounded-2xl p-2 transition',
+        draggedId === group.id && 'opacity-40',
+        dragOverId === group.id && draggedId !== group.id && 'bg-primary-500/5 ring-2 ring-primary-500',
+      ]" @dragover="onDragOver($event, group.id)" @drop="onDrop($event, group.id)">
+        <CategoryHeader :name="group.name" :count="group.habits.length" :can-move-up="index > 0"
+            :can-move-down="index < groupedHabits.length - 1" @dragstart="onDragStart($event, group.id)"
+            @dragend="onDragEnd" @move-up="moveGroup(group.id, groupedHabits[index - 1].id)"
+            @move-down="moveGroup(group.id, groupedHabits[index + 1].id)" />
 
-        <!-- Group Header -->
-        <div class="flex items-center gap-3 px-2 cursor-grab active:cursor-grabbing" draggable="true"
-          @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
-          <GripVertical :size="20"
-            class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 shrink-0" />
-          <div class="w-2 h-6 bg-primary-500 rounded-full shrink-0"></div>
-          <h3 class="text-xl font-black text-neutral-900 dark:text-white uppercase tracking-tight shrink-0">
-            {{ group.name }}
-          </h3>
-          <div class="flex-1 h-px bg-linear-to-r from-neutral-300 dark:from-neutral-600 to-transparent"></div>
-          <span class="text-sm font-medium text-neutral-400 dark:text-neutral-500 shrink-0">
-            {{ group.habits.length }} {{ group.habits.length === 1 ? t('habit') : t('habits') }}
-          </span>
-        </div>
-
-        <!-- Habits Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div v-for="habit in group.habits" :key="habit.habit_id"
-            class="bg-white dark:bg-neutral-800 rounded-4xl p-6 shadow-lg border border-neutral-100 dark:border-neutral-700 hover:shadow-xl transition-all">
-
-            <!-- Habit Header -->
-            <div class="flex items-center gap-3 mb-4">
-              <div class="p-3 rounded-2xl" :style="{ backgroundColor: habit.color + '20' }">
-                <component :is="getIcon(habit.icon)" :size="24" :style="{ color: habit.color }" stroke-width="2.5" />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <article v-for="habit in group.habits" :key="habit.habit_id" :style="{ '--habit': habit.color }"
+            class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 shadow-xs">
+            <div class="flex items-start gap-3">
+              <HabitIcon :icon="habit.icon" :color="habit.color" />
+              <div class="min-w-0 flex-1">
+                <h4 class="truncate leading-snug font-semibold text-ink" :title="habit.habit_name">
+                  {{ habit.habit_name }}
+                </h4>
+                <p class="text-xs font-medium text-ink-faint">{{ t(habit.habit_type) }}</p>
+                <div v-if="habit.tags?.length" class="mt-1 flex flex-wrap gap-1">
+                  <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
+                </div>
               </div>
-              <div class="flex-1">
-                <h4 class="font-black text-neutral-900 dark:text-white text-lg">{{ habit.habit_name }}</h4>
-                <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
-                  <span v-for="tag in habit.tags" :key="tag.id"
-                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
-                    :style="{ backgroundColor: tag.color + '20', color: tag.color }">
-                    {{ tag.name }}
+            </div>
+
+            <!-- Boolean -->
+            <template v-if="habit.habit_type === 'boolean'">
+              <div>
+                <div class="flex items-end justify-between gap-3">
+                  <span class="text-xs font-semibold tracking-wider text-ink-faint uppercase">
+                    {{ t('completionRate') }}
+                  </span>
+                  <span class="font-display text-4xl leading-none font-semibold text-(--habit) tabular-nums">
+                    {{ habit.metrics.completion_rate }}%
                   </span>
                 </div>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-sunken">
+                  <div class="h-full rounded-full bg-(--habit) transition-all duration-500"
+                    :style="{ width: `${Math.min(100, habit.metrics.completion_rate)}%` }"></div>
+                </div>
               </div>
-            </div>
+              <div class="mt-auto grid grid-cols-3 gap-2">
+                <UiStat :label="t('completed')">{{ habit.metrics.total_completions }}</UiStat>
+                <UiStat :label="t('currentStreak')" :icon="Flame" :title="t('currentStreakHint')">{{ habit.metrics.current_streak }}</UiStat>
+                <UiStat :label="t('bestStreak')" :icon="Trophy" :title="t('bestStreakHint')">{{ habit.metrics.best_streak }}</UiStat>
+              </div>
+              <p class="text-center text-xs font-medium text-ink-faint">
+                {{ t('overDays', { n: habit.metrics.days_in_range }) }}
+              </p>
+            </template>
 
-            <!-- Boolean Habit Metrics -->
-            <div v-if="habit.habit_type === 'boolean'" class="space-y-3">
-              <div class="flex justify-between items-center">
-                <span class="text-neutral-500 dark:text-neutral-400 text-sm font-bold">Completion Rate</span>
-                <span class="text-2xl font-black" :style="{ color: habit.color }">
-                  {{ habit.metrics.completion_rate }}%
-                </span>
-              </div>
-              <div class="h-2 bg-neutral-100 dark:bg-neutral-700 rounded-full overflow-hidden">
-                <div class="h-full rounded-full transition-all" :style="{
-                  width: habit.metrics.completion_rate + '%',
-                  backgroundColor: habit.color
-                }"></div>
-              </div>
-              <div class="grid grid-cols-2 gap-3 pt-2">
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-2xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.total_completions }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">{{ t('completed') }}</div>
+            <!-- Counter / Value / Rating -->
+            <template v-else>
+              <div class="rounded-xl bg-(--habit)/10 px-3 py-4 text-center">
+                <div class="font-display text-4xl leading-none font-semibold text-(--habit) tabular-nums">
+                  <template v-if="habit.habit_type === 'rating'">
+                    {{ measured(habit, habit.metrics.average) }}<span class="text-2xl opacity-70">/{{ habit.metrics.max_value || 5 }}</span>
+                  </template>
+                  <template v-else-if="habit.habit_type === 'percentage'">
+                    {{ measured(habit, habit.metrics.average) }}<span class="text-2xl opacity-70">%</span>
+                  </template>
+                  <template v-else>
+                    {{ habit.metrics.total }}
+                    <span v-if="habit.metrics.unit" class="text-xl">{{ habit.metrics.unit }}</span>
+                  </template>
                 </div>
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-2xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.streak }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Day Streak</div>
+                <div class="mt-1.5 text-xs font-semibold tracking-wider text-ink-faint uppercase">
+                  {{ t(summaryLabels[habit.habit_type] || 'total') }}
                 </div>
               </div>
-              <div class="text-center text-xs text-neutral-400 font-bold">
-                Last {{ habit.metrics.days_in_range }} days
-              </div>
-            </div>
 
-            <!-- Counter Habit Metrics -->
-            <div v-else-if="habit.habit_type === 'counter'" class="space-y-3">
-              <div class="text-center p-4 rounded-2xl" :style="{ backgroundColor: habit.color + '10' }">
-                <div class="text-4xl font-black" :style="{ color: habit.color }">
-                  {{ habit.metrics.total }}
-                </div>
-                <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide mt-1">Total Count</div>
+              <div class="mt-auto grid grid-cols-2 gap-2">
+                <template v-if="habit.habit_type === 'counter'">
+                  <UiStat :label="t('avgPerDay')">{{ habit.metrics.average }}</UiStat>
+                  <UiStat :label="t('bestDay')">{{ habit.metrics.max }}</UiStat>
+                </template>
+                <template v-else-if="habit.habit_type === 'value'">
+                  <UiStat :label="t('average')">{{ measured(habit, habit.metrics.average) }}</UiStat>
+                  <UiStat :label="t('highest')">{{ measured(habit, habit.metrics.max_value) }}</UiStat>
+                </template>
+                <template v-else-if="habit.habit_type === 'percentage'">
+                  <UiStat :label="t('highest')">{{ measured(habit, habit.metrics.max) }}</UiStat>
+                  <UiStat :label="t('lowest')">{{ measured(habit, habit.metrics.min) }}</UiStat>
+                </template>
+                <template v-else>
+                  <UiStat :label="t('best')" :icon="Star">{{ measured(habit, habit.metrics.max) }}</UiStat>
+                  <UiStat :label="t('lowest')" :icon="Star">{{ measured(habit, habit.metrics.min) }}</UiStat>
+                </template>
               </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.average }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Avg/Day</div>
-                </div>
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.max }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Best Day</div>
-                </div>
-              </div>
-              <div class="text-center text-xs text-neutral-400 font-bold">
-                Tracked {{ habit.metrics.days_tracked }}/{{ habit.metrics.days_in_range }} days
-              </div>
-            </div>
-
-            <!-- Value Habit Metrics -->
-            <div v-else-if="habit.habit_type === 'value'" class="space-y-3">
-              <div class="text-center p-4 rounded-2xl" :style="{ backgroundColor: habit.color + '10' }">
-                <div class="text-4xl font-black" :style="{ color: habit.color }">
-                  {{ habit.metrics.total }} {{ habit.metrics.unit || '' }}
-                </div>
-                <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide mt-1">Total</div>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.average }} {{ habit.metrics.unit || '' }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Avg/Day</div>
-                </div>
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-neutral-900 dark:text-white">
-                    {{ habit.metrics.max_value }} {{ habit.metrics.unit || '' }}
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Longest</div>
-                </div>
-              </div>
-              <div class="text-center text-xs text-neutral-400 font-bold">
-                Tracked {{ habit.metrics.days_tracked }}/{{ habit.metrics.days_in_range }} days
-              </div>
-            </div>
-
-            <!-- Rating Habit Metrics -->
-            <div v-else-if="habit.habit_type === 'rating'" class="space-y-3">
-              <div class="text-center p-4 rounded-2xl" :style="{ backgroundColor: habit.color + '10' }">
-                <div class="text-4xl font-black" :style="{ color: habit.color }">
-                  {{ habit.metrics.average }}/{{ habit.metrics.max_value }}
-                </div>
-                <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide mt-1">Average Rating</div>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-green-600 dark:text-green-400">
-                    {{ habit.metrics.max }}★
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Best</div>
-                </div>
-                <div class="text-center p-3 bg-neutral-50 dark:bg-neutral-700 rounded-xl">
-                  <div class="text-xl font-black text-red-600 dark:text-red-400">
-                    {{ habit.metrics.min }}★
-                  </div>
-                  <div class="text-xs font-bold text-neutral-400 uppercase tracking-wide">Lowest</div>
-                </div>
-              </div>
-              <div class="text-center text-xs text-neutral-400 font-bold">
-                Tracked {{ habit.metrics.days_tracked }}/{{ habit.metrics.days_in_range }} days
-              </div>
-            </div>
-          </div>
+              <p class="text-center text-xs font-medium text-ink-faint">
+                {{ t('trackedDays', { tracked: habit.metrics.days_tracked, total: habit.metrics.days_in_range }) }}
+              </p>
+            </template>
+          </article>
         </div>
-      </div>
+      </section>
 
-      <!-- Empty State -->
-      <div v-if="!hasAnyData"
-        class="bg-white dark:bg-neutral-800 rounded-4xl p-16 shadow-lg border border-neutral-100 dark:border-neutral-700 text-center">
-        <div class="text-6xl mb-4">📊</div>
-        <h3 class="text-2xl font-black text-neutral-900 dark:text-white mb-2">{{ t('noHabitsYet') }}</h3>
-        <p class="text-neutral-500 dark:text-neutral-400">{{ t('startTracking') }}</p>
-      </div>
+      <UiEmptyState v-if="allHabits.length === 0" :icon="ChartNoAxesColumn" :title="t('noHabitsYet')"
+        :description="t('startTracking')" />
     </div>
   </div>
 </template>
-
-<style scoped>
-.category-group {
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.category-group[draggable="true"] {
-  touch-action: none;
-}
-</style>

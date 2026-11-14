@@ -1,149 +1,76 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useLanguage } from '@/composables/useLanguage'
+import { notifyError } from '@/composables/useToast'
 import { useHabits } from '@/composables/useHabits'
 import { useCategories } from '@/composables/useCategories'
 import { useTags } from '@/composables/useTags'
-import { User, ArrowLeft, Lock, Save, RefreshCw, Plus, Trash2, Pencil, X, Check, ArchiveRestore, Archive, CheckCircle2, FolderOpen, Calendar, Tags, AlertTriangle } from 'lucide-vue-next'
-import * as LucideIcons from 'lucide-vue-next'
-import IconPicker from '@/components/IconPicker.vue'
-import { useRouter } from 'vue-router'
+import { useConfirm } from '@/composables/useConfirm'
+import { useCurrentUser } from '@/composables/useCurrentUser'
+import { toISODate } from '@/utils/dates'
+import {
+    UserRound, KeyRound, Save, Plus, Trash2, Pencil, X, Check, ArchiveRestore, Archive,
+    ListChecks, FolderOpen, Tags, TriangleAlert, Search, ChevronUp, ChevronDown,
+} from 'lucide-vue-next'
 import api from '@/services/api'
-import { useDarkMode } from '@/composables/useDarkMode'
-import SiteFooter from '@/components/SiteFooter.vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import UiSection from '@/components/ui/UiSection.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiIconButton from '@/components/ui/UiIconButton.vue'
+import UiAlert from '@/components/ui/UiAlert.vue'
+import UiModal from '@/components/ui/UiModal.vue'
+import UiDropdown from '@/components/ui/UiDropdown.vue'
+import HabitIcon from '@/components/habits/HabitIcon.vue'
+import TagChip from '@/components/habits/TagChip.vue'
+import HabitFormModal from '@/components/habits/HabitFormModal.vue'
+import { inputClass, inputBaseClass, labelClass } from '@/components/ui/styles'
 
-const router = useRouter()
-const { isDark, toggleDarkMode } = useDarkMode()
-
-const goBack = () => {
-    router.push('/dashboard')
-}
 const { t } = useLanguage()
-const { habits, archivedHabits, fetchHabits, fetchArchivedHabits, archiveHabit, unarchiveHabit, deleteActiveHabit, deleteArchivedHabit, updateHabit } = useHabits()
+const { confirm } = useConfirm()
+const { fetchUser } = useCurrentUser()
+const { habits, archivedHabits, fetchHabits, fetchArchivedHabits, archiveHabit, unarchiveHabit, deleteActiveHabit, deleteArchivedHabit, updateHabit, moveHabit } = useHabits()
 const { categories, isSavingCategory, isDeletingCategory, fetchCategories, addCategory, deleteCategory, updateCategory } = useCategories()
 const { tags, isSavingTag, isDeletingTag, fetchTags, addTag, deleteTag, updateTag } = useTags()
 
-// User info state
-const userInfo = ref({
-    username: '',
-    email: '',
-    is_staff: false,
-    is_superuser: false
-})
+const refreshHabits = () => fetchHabits(toISODate())
 
-// Profile form state
+// --- Account ---
+const userInfo = ref({ username: '', email: '' })
 const profileEmail = ref('')
-const currentPassword = ref('')
-const newPassword = ref('')
-const confirmPassword = ref('')
-const isSavingProfile = ref(false)
+const isSavingEmail = ref(false)
 const profileSaved = ref(false)
-const passwordError = ref('')
-const passwordSuccess = ref(false)
 
-// Category management
-const newCategoryName = ref('')
-const editingCategory = ref(null)
-const editingCategoryName = ref('')
-
-// Tag management
-const newTagName = ref('')
-const newTagColor = ref('#6B7280')
-const editingTag = ref(null)
-const editingTagName = ref('')
-const editingTagColor = ref('')
-
-// Habit editing
-const editingHabit = ref(null)
-const editingHabitData = ref({
-    name: '',
-    icon: '',
-    color: '',
-    habit_type: '',
-    max_value: 5,
-    unit: '',
-    category: null
-})
-const isSavingHabit = ref(false)
-
-// Habit tag management
-const addingTagToHabit = ref(null)
-const tagSearchQuery = ref('')
-const filteredTags = ref([])
-
-const openTagSearch = (habitId) => {
-    addingTagToHabit.value = habitId
-    tagSearchQuery.value = ''
-    updateFilteredTags(habitId)
-}
-
-const closeTagSearch = () => {
-    addingTagToHabit.value = null
-    tagSearchQuery.value = ''
-}
-
-const updateFilteredTags = (habitId) => {
-    const habit = habits.value.find(h => h.id === habitId)
-    const habitTagIds = habit?.tags?.map(t => t.id) || []
-    filteredTags.value = tags.value.filter(tag =>
-        !habitTagIds.includes(tag.id) &&
-        tag.name.toLowerCase().includes(tagSearchQuery.value.toLowerCase())
-    )
-}
-
-const addTagToHabit = async (habitId, tagId) => {
-    const habit = habits.value.find(h => h.id === habitId)
-    if (!habit) return
-
-    const currentTagIds = habit.tags?.map(t => t.id) || []
-    const newTagIds = [...currentTagIds, tagId]
-
-    try {
-        await updateHabit(habitId, { tag_ids: newTagIds })
-        await fetchHabits(new Date().toISOString().split('T')[0])
-        closeTagSearch()
-    } catch (err) {
+const loadUser = async () => {
+    const data = await fetchUser(true)
+    if (data) {
+        userInfo.value = data
+        profileEmail.value = data.email
     }
 }
 
-const removeTagFromHabit = async (habitId, tagId) => {
-    const habit = habits.value.find(h => h.id === habitId)
-    if (!habit) return
-
-    const currentTagIds = habit.tags?.map(t => t.id) || []
-    const newTagIds = currentTagIds.filter(id => id !== tagId)
-
-    try {
-        await updateHabit(habitId, { tag_ids: newTagIds })
-        await fetchHabits(new Date().toISOString().split('T')[0])
-    } catch (err) {
-    }
-}
-
-// Fetch user info
-const fetchUserInfo = async () => {
-    try {
-        const response = await api.get('auth/user/')
-        userInfo.value = response.data
-        profileEmail.value = response.data.email
-    } catch (err) {
-    }
-}
-
-// Update profile email
 const updateProfile = async () => {
-    isSavingProfile.value = true
+    isSavingEmail.value = true
     try {
         await api.patch('auth/user/', { email: profileEmail.value })
         profileSaved.value = true
         setTimeout(() => { profileSaved.value = false }, 3000)
+        fetchUser(true)
     } catch (err) {
+        notifyError(err, 'saveFailed')
     } finally {
-        isSavingProfile.value = false
+        isSavingEmail.value = false
     }
 }
 
-// Change password
+// --- Password ---
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const isSavingPassword = ref(false)
+const passwordError = ref('')
+const passwordSuccess = ref(false)
+
 const changePassword = async () => {
     passwordError.value = ''
     passwordSuccess.value = false
@@ -158,7 +85,7 @@ const changePassword = async () => {
         return
     }
 
-    isSavingProfile.value = true
+    isSavingPassword.value = true
     try {
         await api.post('auth/password/change/', {
             old_password: currentPassword.value,
@@ -171,17 +98,26 @@ const changePassword = async () => {
         confirmPassword.value = ''
         setTimeout(() => { passwordSuccess.value = false }, 3000)
     } catch (err) {
-        passwordError.value = err.response?.data?.old_password?.[0] || t('passwordChangeFailed')
+        const errors = err.response?.data || {}
+        passwordError.value = errors.old_password?.[0] || errors.new_password2?.[0] || errors.new_password1?.[0] || t('passwordChangeFailed')
     } finally {
-        isSavingProfile.value = false
+        isSavingPassword.value = false
     }
 }
 
-// Category management
+// --- Categories ---
+const newCategoryName = ref('')
+const editingCategory = ref(null)
+const editingCategoryName = ref('')
+
 const handleAddCategory = async () => {
     if (!newCategoryName.value.trim()) return
-    await addCategory(newCategoryName.value.trim())
-    newCategoryName.value = ''
+    try {
+        await addCategory(newCategoryName.value.trim())
+        newCategoryName.value = ''
+    } catch (err) {
+        notifyError(err, 'saveFailed')
+    }
 }
 
 const startEditCategory = (category) => {
@@ -189,30 +125,56 @@ const startEditCategory = (category) => {
     editingCategoryName.value = category.name
 }
 
-const saveEditCategory = async (categoryId) => {
-    if (!editingCategoryName.value.trim()) return
-    await updateCategory(categoryId, editingCategoryName.value.trim())
-    editingCategory.value = null
-    await fetchCategories()
-}
-
 const cancelEditCategory = () => {
     editingCategory.value = null
     editingCategoryName.value = ''
 }
 
-const handleDeleteCategory = async (categoryId) => {
-    if (confirm(t('confirmDeleteCategory'))) {
-        await deleteCategory(categoryId)
+const saveEditCategory = async (categoryId) => {
+    if (!editingCategoryName.value.trim()) return
+    try {
+        await updateCategory(categoryId, editingCategoryName.value.trim())
+        editingCategory.value = null
+        await fetchCategories()
+        // Habits embed their category, so refresh them too
+        refreshHabits()
+    } catch (err) {
+        notifyError(err, 'saveFailed')
     }
 }
 
-// Tag management
+const handleDeleteCategory = async (category) => {
+    const ok = await confirm({
+        title: t('deleteCategory'),
+        message: t('confirmDeleteCategory'),
+        confirmLabel: t('delete'),
+        danger: true,
+    })
+    if (!ok) return
+    try {
+        await deleteCategory(category.id)
+        refreshHabits()
+    } catch (err) {
+        notifyError(err, 'deleteFailed')
+    }
+}
+
+// --- Tags ---
+const newTagName = ref('')
+const newTagColor = ref('#64748b')
+const editingTag = ref(null)
+const editingTagName = ref('')
+const editingTagColor = ref('')
+
 const handleAddTag = async () => {
     if (!newTagName.value.trim()) return
-    await addTag(newTagName.value.trim(), newTagColor.value)
-    newTagName.value = ''
-    newTagColor.value = '#6B7280'
+    try {
+        await addTag(newTagName.value.trim(), newTagColor.value)
+        newTagName.value = ''
+        newTagColor.value = '#64748b'
+    } catch (err) {
+        notifyError(err, 'saveFailed')
+    }
 }
 
 const startEditTag = (tag) => {
@@ -221,130 +183,157 @@ const startEditTag = (tag) => {
     editingTagColor.value = tag.color
 }
 
-const saveEditTag = async (tagId) => {
-    if (!editingTagName.value.trim()) return
-    await updateTag(tagId, {
-        name: editingTagName.value.trim(),
-        color: editingTagColor.value
-    })
-    editingTag.value = null
-}
-
 const cancelEditTag = () => {
     editingTag.value = null
     editingTagName.value = ''
     editingTagColor.value = ''
 }
 
-const handleDeleteTag = async (tagId) => {
-    if (confirm(t('confirmDeleteTag'))) {
-        await deleteTag(tagId)
-    }
-}
-
-// Habit editing (for archived habits)
-const startEditHabit = (habit) => {
-    editingHabit.value = habit.id
-    editingHabitData.value = {
-        name: habit.name,
-        icon: habit.icon,
-        color: habit.color,
-        habit_type: habit.habit_type,
-        max_value: habit.max_value || 5,
-        unit: habit.unit || '',
-        category: habit.category?.id || null
-    }
-}
-
-const saveEditHabit = async () => {
-    isSavingHabit.value = true
+const saveEditTag = async (tagId) => {
+    if (!editingTagName.value.trim()) return
     try {
-        await updateHabit(editingHabit.value, {
-            name: editingHabitData.value.name,
-            icon: editingHabitData.value.icon,
-            color: editingHabitData.value.color,
-            habit_type: editingHabitData.value.habit_type,
-            max_value: editingHabitData.value.max_value,
-            unit: editingHabitData.value.unit,
-            category: editingHabitData.value.category
+        await updateTag(tagId, {
+            name: editingTagName.value.trim(),
+            color: editingTagColor.value
         })
-        editingHabit.value = null
-        await fetchHabits(new Date().toISOString().split('T')[0])
-        await fetchArchivedHabits()
+        editingTag.value = null
+        refreshHabits()
     } catch (err) {
+        notifyError(err, 'saveFailed')
+    }
+}
+
+const handleDeleteTag = async (tag) => {
+    const ok = await confirm({
+        title: t('deleteTag'),
+        message: t('confirmDeleteTag'),
+        confirmLabel: t('delete'),
+        danger: true,
+    })
+    if (!ok) return
+    try {
+        await deleteTag(tag.id)
+        refreshHabits()
+    } catch (err) {
+        notifyError(err, 'deleteFailed')
+    }
+}
+
+// --- Habit tags ---
+const tagSearchQuery = ref('')
+
+const availableTags = (habit) => {
+    const assigned = new Set(habit.tags?.map(tag => tag.id) || [])
+    const query = tagSearchQuery.value.trim().toLowerCase()
+    return tags.value.filter(tag => !assigned.has(tag.id) && tag.name.toLowerCase().includes(query))
+}
+
+const setHabitTags = async (habit, tagIds) => {
+    try {
+        await updateHabit(habit.id, { tag_ids: tagIds })
+        await refreshHabits()
+    } catch (err) {
+        notifyError(err, 'saveFailed')
+    }
+}
+
+const addTagToHabit = (habit, tagId) => setHabitTags(habit, [...(habit.tags?.map(tag => tag.id) || []), tagId])
+
+const removeTagFromHabit = (habit, tagId) =>
+    setHabitTags(habit, (habit.tags || []).map(tag => tag.id).filter(id => id !== tagId))
+
+// --- Habit editing (active and archived) ---
+const editingHabit = ref(null)
+const isSavingHabit = ref(false)
+const habitFormError = ref('')
+
+const startEditHabit = (habit) => {
+    habitFormError.value = ''
+    editingHabit.value = habit
+}
+
+const saveEditHabit = async (payload) => {
+    isSavingHabit.value = true
+    habitFormError.value = ''
+    try {
+        await updateHabit(editingHabit.value.id, payload)
+        editingHabit.value = null
+        await Promise.all([refreshHabits(), fetchArchivedHabits()])
+    } catch (err) {
+        habitFormError.value = t('saveFailed')
     } finally {
         isSavingHabit.value = false
     }
 }
 
-const cancelEditHabit = () => {
-    editingHabit.value = null
-}
-
-const handleArchiveHabit = async (habitId) => {
-    await archiveHabit(habitId)
-}
-
-const handleDeleteActiveHabit = async (habitId) => {
-    if (confirm(t('confirmDeletePermanent'))) {
-        await deleteActiveHabit(habitId)
-        await fetchHabits(new Date().toISOString().split('T')[0])
+const handleMoveHabit = async (habit, direction) => {
+    try {
+        await moveHabit(habit.id, direction)
+    } catch (err) {
+        notifyError(err, 'saveFailed')
     }
 }
 
-const handleUnarchive = async (habitId) => {
-    await unarchiveHabit(habitId)
-    await fetchHabits(new Date().toISOString().split('T')[0])
-}
-
-const handleArchivedDelete = async (habitId) => {
-    if (confirm(t('confirmDeletePermanent'))) {
-        await deleteArchivedHabit(habitId)
-        await fetchArchivedHabits()
+const handleArchiveHabit = async (habit) => {
+    const ok = await confirm({
+        title: t('archiveHabit'),
+        message: t('confirmHabitArchive'),
+        confirmLabel: t('archive'),
+    })
+    if (!ok) return
+    try {
+        await archiveHabit(habit.id)
+    } catch (err) {
+        notifyError(err, 'saveFailed')
     }
 }
 
-// Get icon component
-const getIcon = (iconName) => {
-    if (!iconName) return LucideIcons.Calendar
-    const pascalCase = iconName
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('')
-    return LucideIcons[pascalCase] || LucideIcons.Calendar
-}
-
-// Click outside handler to close tag search dropdown
-const handleClickOutside = (event) => {
-    if (addingTagToHabit.value !== null) {
-        const dropdown = event.target.closest('.relative')
-        if (!dropdown || !dropdown.contains(event.target)) {
-            closeTagSearch()
-        }
+const handleUnarchive = async (habit) => {
+    try {
+        await unarchiveHabit(habit.id)
+        await refreshHabits()
+    } catch (err) {
+        notifyError(err, 'saveFailed')
     }
 }
 
-// Delete all data
+const handleDeleteHabit = async (habit, archived) => {
+    const ok = await confirm({
+        title: t('deleteHabit'),
+        message: `${habit.name}\n\n${t('confirmDeletePermanent')}`,
+        confirmLabel: t('delete'),
+        danger: true,
+    })
+    if (!ok) return
+    try {
+        if (archived) await deleteArchivedHabit(habit.id)
+        else await deleteActiveHabit(habit.id)
+    } catch (err) {
+        notifyError(err, 'deleteFailed')
+    }
+}
+
+// --- Delete all data ---
+const DELETE_KEYWORD = 'DELETE'
 const showDeleteAllDataModal = ref(false)
 const deleteConfirmationText = ref('')
 const isDeletingAllData = ref(false)
 const deleteAllDataError = ref('')
 
+const canDeleteAll = computed(() => deleteConfirmationText.value === DELETE_KEYWORD)
+
 const openDeleteAllDataModal = () => {
-    showDeleteAllDataModal.value = true
     deleteConfirmationText.value = ''
     deleteAllDataError.value = ''
+    showDeleteAllDataModal.value = true
 }
 
 const closeDeleteAllDataModal = () => {
     showDeleteAllDataModal.value = false
-    deleteConfirmationText.value = ''
-    deleteAllDataError.value = ''
 }
 
 const deleteAllUserData = async () => {
-    // Check confirmation text
-    if (deleteConfirmationText.value !== 'DELETE') {
+    if (!canDeleteAll.value) {
         deleteAllDataError.value = t('confirmationMismatch')
         return
     }
@@ -353,682 +342,303 @@ const deleteAllUserData = async () => {
     deleteAllDataError.value = ''
 
     try {
-        const response = await api.post('auth/delete-all-data/')
-
-        // Close modal
-        closeDeleteAllDataModal()
-
-        // Refresh the page to show empty state
+        await api.post('auth/delete-all-data/')
+        // Reload to show the empty state everywhere
         window.location.reload()
     } catch (err) {
         deleteAllDataError.value = err.response?.data?.message || t('deleteAllDataFailed')
-    } finally {
         isDeletingAllData.value = false
     }
 }
 
+const rowClass = 'flex items-center gap-2 rounded-xl bg-sunken px-3 py-2'
+const habitRowClass = 'flex items-start gap-3 rounded-xl bg-sunken p-3'
+const metaChipClass = 'rounded-full bg-line px-2 py-0.5 text-xs font-semibold text-ink-soft'
+const colorInputClass =
+    'shrink-0 cursor-pointer rounded-lg border border-line bg-surface p-1 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0'
+
 onMounted(() => {
-    fetchUserInfo()
+    loadUser()
     fetchCategories()
     fetchTags()
-    fetchHabits(new Date().toISOString().split('T')[0])
+    refreshHabits()
     fetchArchivedHabits()
-    document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
-
 <template>
-    <div
-        class="min-h-screen bg-neutral-50 dark:bg-neutral-900 p-6 md:p-12 font-sans text-neutral-900 dark:text-neutral-100 transition-colors duration-300">
-        <div class="max-w-4xl mx-auto">
-            <!-- Header -->
-            <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-                <div>
-                    <button @click="goBack"
-                        class="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors mb-4 font-bold">
-                        <ArrowLeft :size="20" stroke-width="2.5" />
-                        {{ t('returnDashboard') }}
-                    </button>
-                    <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic">
-                        {{ t('profile') }}
-                    </h1>
-                    <p class="text-neutral-400 dark:text-neutral-500 font-medium">{{ t('profileDescription') }}</p>
-                </div>
-            </header>
+    <PageShell :title="t('profile')" :description="t('profileDescription')" width="max-w-4xl">
+        <!-- Account -->
+        <UiSection :title="t('accountInformation')" :icon="UserRound">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <UiInput :model-value="userInfo.username" :label="t('username')" :hint="t('cannotChange')" disabled />
 
-            <!-- Main Content -->
-            <div class="space-y-6">
-                <div class="space-y-8">
-                    <!-- Account Section -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-primary-100 dark:bg-primary-900">
-                                <User :size="24" class="text-primary-600 dark:text-primary-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('accountInformation')
-                            }}</h2>
-                        </div>
-
-                        <div class="space-y-6">
-                            <!-- Username (read-only) -->
-                            <div class="space-y-2">
-                                <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                    t('username')
-                                }}</label>
-                                <div
-                                    class="bg-neutral-100 dark:bg-neutral-700 rounded-2xl px-6 py-4 font-bold text-neutral-600 dark:text-neutral-300">
-                                    {{ userInfo.username }}
-                                </div>
-                            </div>
-
-                            <!-- Email -->
-                            <div class="space-y-2">
-                                <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                    t('email')
-                                }}</label>
-                                <div class="flex gap-3">
-                                    <input v-model="profileEmail" type="email"
-                                        class="flex-1 bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                                    <button @click="updateProfile" :disabled="isSavingProfile"
-                                        class="px-6 py-4 bg-primary-600 text-white rounded-2xl font-bold hover:bg-primary-700 transition-all disabled:opacity-50 flex items-center gap-2">
-                                        <RefreshCw v-if="isSavingProfile" :size="20" class="animate-spin" />
-                                        <Save v-else :size="20" />
-                                        {{ profileSaved ? (t('saved')) : (t('save')) }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                <form @submit.prevent="updateProfile">
+                    <label :class="labelClass" for="profile-email">{{ t('email') }}</label>
+                    <div class="flex gap-2">
+                        <input id="profile-email" v-model="profileEmail" type="email" required autocomplete="email"
+                            :class="inputClass" />
+                        <UiButton type="submit" size="field" :icon="profileSaved ? Check : Save"
+                            :loading="isSavingEmail">
+                            {{ profileSaved ? t('saved') : t('save') }}
+                        </UiButton>
                     </div>
-
-                    <!-- Password Section -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-orange-100 dark:bg-orange-900">
-                                <Lock :size="24" class="text-orange-600 dark:text-orange-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('changePassword') }}
-                            </h2>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="space-y-2">
-                                <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                    t('currentPassword') }}</label>
-                                <input v-model="currentPassword" type="password"
-                                    class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                        t('newPassword') }}</label>
-                                    <input v-model="newPassword" type="password"
-                                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                                </div>
-                                <div class="space-y-2">
-                                    <label class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                        t('confirmNewPassword') }}</label>
-                                    <input v-model="confirmPassword" type="password"
-                                        class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                                </div>
-                            </div>
-
-                            <div v-if="passwordError"
-                                class="p-4 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-2xl font-bold">
-                                {{ passwordError }}
-                            </div>
-
-                            <div v-if="passwordSuccess"
-                                class="p-4 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-2xl font-bold">
-                                {{ t('passwordChanged') }}
-                            </div>
-
-                            <button @click="changePassword"
-                                :disabled="isSavingProfile || !currentPassword || !newPassword || !confirmPassword"
-                                class="w-full py-4 bg-orange-600 text-white rounded-2xl font-bold hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                                <RefreshCw v-if="isSavingProfile" :size="20" class="animate-spin" />
-                                <Lock v-else :size="20" />
-                                {{ t('updatePassword') }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Category Management -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-purple-100 dark:bg-purple-900">
-                                <component :is="LucideIcons.FolderOpen" :size="24"
-                                    class="text-purple-600 dark:text-purple-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('yourCategories') }}
-                            </h2>
-                        </div>
-
-                        <!-- Add Category -->
-                        <div class="flex gap-3 mb-6">
-                            <input v-model="newCategoryName" type="text" :placeholder="t('newCategoryName')"
-                                @keyup.enter="handleAddCategory"
-                                class="flex-1 bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                            <button @click="handleAddCategory" :disabled="isSavingCategory || !newCategoryName.trim()"
-                                class="px-6 py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-all disabled:opacity-50 flex items-center gap-2">
-                                <RefreshCw v-if="isSavingCategory" :size="20" class="animate-spin" />
-                                <Plus v-else :size="20" />
-                                {{ t('add') }}
-                            </button>
-                        </div>
-
-                        <!-- Category List -->
-                        <div class="space-y-3">
-                            <div v-for="category in categories" :key="category.id"
-                                class="flex items-center gap-4 p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                                <template v-if="editingCategory === category.id">
-                                    <input v-model="editingCategoryName" type="text"
-                                        class="flex-1 bg-white dark:bg-neutral-600 border-2 border-primary-500 rounded-xl px-4 py-2 font-bold outline-none text-neutral-900 dark:text-white"
-                                        @keyup.enter="saveEditCategory(category.id)" />
-                                    <button @click="saveEditCategory(category.id)"
-                                        class="p-2 rounded-xl bg-green-500 text-white hover:bg-green-600 transition-all hover:scale-120">
-                                        <Check :size="20" />
-                                    </button>
-                                    <button @click="cancelEditCategory"
-                                        class="p-2 rounded-xl bg-neutral-300 dark:bg-neutral-500 text-neutral-700 dark:text-white hover:bg-neutral-400 transition-all hover:scale-120">
-                                        <X :size="20" />
-                                    </button>
-                                </template>
-                                <template v-else>
-                                    <span class="flex-1 font-bold text-neutral-900 dark:text-white">{{ category.name
-                                    }}</span>
-                                    <button @click="startEditCategory(category)"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Pencil :size="18" class="text-neutral-400 hover:text-primary-500" />
-                                    </button>
-                                    <button @click="handleDeleteCategory(category.id)"
-                                        :disabled="isDeletingCategory === category.id"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <RefreshCw v-if="isDeletingCategory === category.id" :size="18"
-                                            class="animate-spin text-neutral-400" />
-                                        <Trash2 v-else :size="18" class="text-neutral-400 hover:text-red-500" />
-                                    </button>
-                                </template>
-                            </div>
-
-                            <div v-if="categories.length === 0" class="text-center py-8 text-neutral-400 font-medium">
-                                {{ t('noCategories') }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tag Management -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-teal-100 dark:bg-teal-900">
-                                <Tags :size="24" class="text-teal-600 dark:text-teal-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('yourTags') }}</h2>
-                        </div>
-
-                        <!-- Add Tag -->
-                        <div class="flex gap-3 mb-6">
-                            <input v-model="newTagName" type="text" :placeholder="t('newTagName')"
-                                @keyup.enter="handleAddTag"
-                                class="flex-1 bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-2xl px-6 py-4 font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                            <div class="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-700 rounded-2xl px-4">
-                                <input v-model="newTagColor" type="color"
-                                    class="w-10 h-10 rounded-xl cursor-pointer border-none bg-transparent" />
-                            </div>
-                            <button @click="handleAddTag" :disabled="isSavingTag || !newTagName.trim()"
-                                class="px-6 py-4 bg-teal-600 text-white rounded-2xl font-bold hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-2">
-                                <RefreshCw v-if="isSavingTag" :size="20" class="animate-spin" />
-                                <Plus v-else :size="20" />
-                                {{ t('add') }}
-                            </button>
-                        </div>
-
-                        <!-- Tag List -->
-                        <div class="space-y-3">
-                            <div v-for="tag in tags" :key="tag.id"
-                                class="flex items-center gap-4 p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                                <template v-if="editingTag === tag.id">
-                                    <div class="w-6 h-6 rounded-full shrink-0"
-                                        :style="{ backgroundColor: editingTagColor }"></div>
-                                    <input v-model="editingTagName" type="text"
-                                        class="flex-1 bg-white dark:bg-neutral-600 border-2 border-primary-500 rounded-xl px-4 py-2 font-bold outline-none text-neutral-900 dark:text-white"
-                                        @keyup.enter="saveEditTag(tag.id)" />
-                                    <input v-model="editingTagColor" type="color"
-                                        class="w-10 h-10 rounded-xl cursor-pointer border-none bg-transparent" />
-                                    <button @click="saveEditTag(tag.id)"
-                                        class="p-2 rounded-xl bg-green-500 text-white hover:bg-green-600 transition-all hover:scale-120">
-                                        <Check :size="20" />
-                                    </button>
-                                    <button @click="cancelEditTag"
-                                        class="p-2 rounded-xl bg-neutral-300 dark:bg-neutral-500 text-neutral-700 dark:text-white hover:bg-neutral-400 transition-all hover:scale-120">
-                                        <X :size="20" />
-                                    </button>
-                                </template>
-                                <template v-else>
-                                    <div class="w-6 h-6 rounded-full shrink-0" :style="{ backgroundColor: tag.color }">
-                                    </div>
-                                    <span class="flex-1 font-bold text-neutral-900 dark:text-white">{{ tag.name
-                                        }}</span>
-                                    <button @click="startEditTag(tag)"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Pencil :size="18" class="text-neutral-400 hover:text-primary-500" />
-                                    </button>
-                                    <button @click="handleDeleteTag(tag.id)" :disabled="isDeletingTag === tag.id"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <RefreshCw v-if="isDeletingTag === tag.id" :size="18"
-                                            class="animate-spin text-neutral-400" />
-                                        <Trash2 v-else :size="18" class="text-neutral-400 hover:text-red-500" />
-                                    </button>
-                                </template>
-                            </div>
-
-                            <div v-if="tags.length === 0" class="text-center py-8 text-neutral-400 font-medium">
-                                {{ t('noTags') }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Manage Habits -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-2xl">
-                                <CheckCircle2 :size="24" class="text-blue-600 dark:text-blue-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('yourHabits') }}</h2>
-                        </div>
-
-                        <!-- Existing Habits -->
-                        <div class="space-y-3">
-                            <p class="text-xs font-black uppercase tracking-widest text-neutral-400 ml-2 mb-3">
-                                Your Habits ({{ habits.length }})
-                            </p>
-
-                            <div v-if="habits.length === 0"
-                                class="text-center py-8 text-neutral-400 dark:text-neutral-500">
-                                No habits yet. Create your first habit using the "+ Add Habit" button at the top.
-                            </div>
-
-                            <div v-for="habit in habits" :key="habit.id"
-                                class="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl hover:shadow-md transition-all">
-                                <div class="flex items-center gap-4 flex-1">
-                                    <div class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center"
-                                        :style="{ backgroundColor: habit.color + '20' }">
-                                        <component :is="getIcon(habit.icon)" :size="20" :style="{ color: habit.color }"
-                                            stroke-width="2.5" />
-                                    </div>
-                                    <div class="flex-1">
-                                        <p class="font-bold text-neutral-900 dark:text-white">{{ habit.name }}</p>
-                                        <div class="flex flex-wrap gap-2 mt-1 items-center">
-                                            <span
-                                                class="text-xs px-2 py-1 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300 font-bold">
-                                                {{ habit.habit_type }}
-                                            </span>
-                                            <span v-if="habit.category"
-                                                class="text-xs px-2 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-bold">
-                                                {{ habit.category.name }}
-                                            </span>
-                                            <!-- Tags -->
-                                            <span v-for="tag in habit.tags" :key="tag.id"
-                                                class="text-xs px-2 py-1 rounded-full font-bold flex items-center justify-center group min-w-8"
-                                                :style="{
-                                                    backgroundColor: tag.color + '20',
-                                                    color: tag.color
-                                                }">
-                                                <span>{{ tag.name }}</span>
-                                                <X :size="12" class="hidden group-hover:block ml-2 cursor-pointer"
-                                                    @click.stop="removeTagFromHabit(habit.id, tag.id)" />
-                                            </span>
-                                            <!-- Add Tag Button -->
-                                            <div class="relative">
-                                                <button @click.stop="openTagSearch(habit.id)"
-                                                    class="text-xs px-2 py-1 rounded-full bg-neutral-100 dark:bg-neutral-600 text-neutral-500 dark:text-neutral-400 font-bold hover:bg-neutral-200 dark:hover:bg-neutral-500 transition-colors flex items-center gap-1">
-                                                    <Plus :size="12" />
-                                                </button>
-                                                <!-- Tag Search Dropdown -->
-                                                <div v-if="addingTagToHabit === habit.id"
-                                                    class="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-neutral-700 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-600 z-20 overflow-hidden">
-                                                    <input v-model="tagSearchQuery"
-                                                        @input="updateFilteredTags(habit.id)" type="text"
-                                                        :placeholder="t('searchTags')"
-                                                        class="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-600 outline-none text-neutral-900 dark:text-white"
-                                                        @click.stop />
-                                                    <div class="max-h-32 overflow-y-auto">
-                                                        <button v-for="tag in filteredTags" :key="tag.id"
-                                                            @click.stop="addTagToHabit(habit.id, tag.id)"
-                                                            class="w-full px-3 py-2 text-sm text-left hover:bg-neutral-100 dark:hover:bg-neutral-600 flex items-center gap-2 transition-colors">
-                                                            <span class="w-3 h-3 rounded-full shrink-0"
-                                                                :style="{ backgroundColor: tag.color }"></span>
-                                                            <span class="text-neutral-900 dark:text-white">{{ tag.name
-                                                            }}</span>
-                                                        </button>
-                                                        <div v-if="filteredTags.length === 0"
-                                                            class="px-3 py-2 text-sm text-neutral-400 dark:text-neutral-500">
-                                                            {{ t('noTagsFound') }}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="flex gap-2 ml-4">
-                                    <button @click="startEditHabit(habit)" :title="t('editHabit')"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Pencil :size="18" class="text-neutral-400 hover:text-blue-500" />
-                                    </button>
-                                    <button @click="handleArchiveHabit(habit.id)" :title="t('archiveHabit')"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Archive :size="18" class="text-neutral-400 hover:text-primary-500" />
-                                    </button>
-                                    <button @click="handleDeleteActiveHabit(habit.id)"
-                                        :title="t('deleteHabitPermanently')"
-                                        class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                        <Trash2 :size="18" class="text-neutral-400 hover:text-red-500" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Archived Habits -->
-                    <div
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-amber-100 dark:bg-amber-900">
-                                <Archive :size="24" class="text-amber-600 dark:text-amber-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ t('archivedHabits') }}
-                            </h2>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div v-for="habit in archivedHabits" :key="habit.id"
-                                class="flex items-center gap-2 p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                                <!-- Icon -->
-                                <div class="p-3 rounded-xl" :style="{ backgroundColor: habit.color + '20' }">
-                                    <component :is="getIcon(habit.icon)" :size="24" :style="{ color: habit.color }"
-                                        stroke-width="2.5" />
-                                </div>
-
-                                <!-- Info -->
-                                <div class="flex-1">
-                                    <h4 class="font-bold text-neutral-900 dark:text-white">{{ habit.name }}</h4>
-                                    <div class="flex flex-wrap gap-2 mt-1">
-                                        <span
-                                            class="text-xs px-2 py-1 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300 font-bold">
-                                            {{ habit.habit_type }}
-                                        </span>
-                                        <span v-if="habit.category"
-                                            class="text-xs px-2 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-bold">
-                                            {{ habit.category.name }}
-                                        </span>
-                                        <!-- Tags -->
-                                        <span v-for="tag in habit.tags" :key="tag.id"
-                                            class="text-xs px-2 py-1 rounded-full font-bold" :style="{
-                                                backgroundColor: tag.color + '20',
-                                                color: tag.color
-                                            }">
-                                            {{ tag.name }}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- Actions -->
-                                <button @click="startEditHabit(habit)"
-                                    class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120"
-                                    :title="t('edit')">
-                                    <Pencil :size="18" class="text-neutral-400 hover:text-blue-500" />
-                                </button>
-                                <button @click="handleUnarchive(habit.id)"
-                                    class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120"
-                                    :title="t('unarchive')">
-                                    <ArchiveRestore :size="18" class="text-neutral-400 hover:text-green-500" />
-                                </button>
-                                <button @click="handleArchivedDelete(habit.id)" :title="t('deleteHabitPermanently')"
-                                    class="p-2 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all hover:scale-120">
-                                    <Trash2 :size="18" class="text-neutral-400 hover:text-red-500" />
-                                </button>
-                            </div>
-
-                            <div v-if="archivedHabits.length === 0"
-                                class="text-center py-8 text-neutral-400 font-medium">
-                                {{ t('noArchivedHabits') }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Edit Habit Modal -->
-                    <Teleport to="body">
-                        <Transition name="fade">
-                            <div v-if="editingHabit" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                                <div class="absolute inset-0 bg-neutral-900/60 backdrop-blur-md"
-                                    @click="cancelEditHabit"></div>
-                                <div
-                                    class="relative z-10 bg-white dark:bg-neutral-800 w-full max-w-lg rounded-4xl p-12 shadow-2xl overflow-hidden">
-                                    <div class="absolute top-0 left-0 right-0 h-2 bg-blue-500"></div>
-
-                                    <div class="flex justify-between items-center mb-10">
-                                        <h2 class="text-3xl font-black text-neutral-900 dark:text-white">{{
-                                            t('editHabit') }}
-                                        </h2>
-                                        <button @click="cancelEditHabit"
-                                            class="text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition">
-                                            <X :size="32" />
-                                        </button>
-                                    </div>
-
-                                    <form @submit.prevent="saveEditHabit" class="space-y-8">
-                                        <div class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('habitName') || 'Habit Name' }}</label>
-                                            <input v-model="editingHabitData.name" type="text" required
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white" />
-                                        </div>
-
-                                        <IconPicker v-model="editingHabitData.icon" :label="t('icon') || 'Icon'" />
-
-                                        <div class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('type') }}</label>
-                                            <select v-model="editingHabitData.habit_type"
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white appearance-none cursor-pointer">
-                                                <option value="boolean">{{ t('typeBoolean') }}</option>
-                                                <option value="counter">{{ t('typeCounter') }}</option>
-                                                <option value="value">{{ t('typeValue') }}</option>
-                                                <option value="rating">{{ t('typeRating') }}</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('category') }}</label>
-                                            <select v-model="editingHabitData.category"
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white appearance-none cursor-pointer">
-                                                <option :value="null">{{ t('noCategory') }}</option>
-                                                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{
-                                                    cat.name }}
-                                                </option>
-                                            </select>
-                                        </div>
-
-                                        <div v-if="editingHabitData.habit_type === 'value'" class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('unit') }}</label>
-                                            <input v-model="editingHabitData.unit" type="text"
-                                                :placeholder="t('unitPlaceholder')"
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-neutral-900 dark:text-white" />
-                                        </div>
-
-                                        <div v-if="editingHabitData.habit_type === 'rating'" class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('maxRating') }}</label>
-                                            <input v-model.number="editingHabitData.max_value" type="number" min="1"
-                                                max="10"
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-50 dark:border-neutral-700 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-primary-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white" />
-                                        </div>
-
-                                        <div class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">{{
-                                                    t('color') }}</label>
-                                            <div
-                                                class="flex items-center gap-4 bg-neutral-50 dark:bg-neutral-700 p-4 rounded-3xl">
-                                                <input v-model="editingHabitData.color" type="color"
-                                                    class="w-16 h-10 rounded-2xl cursor-pointer border-none" />
-                                                <span
-                                                    class="font-mono text-sm text-neutral-600 dark:text-neutral-400">{{
-                                                        editingHabitData.color
-                                                    }}</span>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex gap-3">
-                                            <button type="submit" :disabled="isSavingHabit"
-                                                class="flex-1 bg-blue-600 text-white py-4 rounded-3xl font-black hover:bg-blue-700 transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-2">
-                                                <RefreshCw v-if="isSavingHabit" :size="20" class="animate-spin" />
-                                                <Save v-else :size="20" stroke-width="2.5" />
-                                                {{ isSavingHabit ? (t('saving')) : (t('save')) }}
-                                            </button>
-                                            <button type="button" @click="cancelEditHabit"
-                                                class="flex-1 bg-neutral-300 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300 py-4 rounded-3xl font-black hover:bg-neutral-400 dark:hover:bg-neutral-500 transition-all">
-                                                {{ t('cancel') }}
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </Transition>
-                    </Teleport>
-
-                    <!-- Danger Zone -->
-                    <div
-                        class="bg-red-50 dark:bg-red-950/30 rounded-4xl p-8 shadow-lg border-2 border-red-200 dark:border-red-900">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="p-3 rounded-2xl bg-red-100 dark:bg-red-900">
-                                <AlertTriangle :size="24" class="text-red-600 dark:text-red-400" stroke-width="2.5" />
-                            </div>
-                            <h2 class="text-2xl font-black text-red-900 dark:text-red-300">{{ t('dangerZone') }}</h2>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div
-                                class="bg-white dark:bg-neutral-800 rounded-2xl p-6 border border-red-200 dark:border-red-900">
-                                <h3 class="font-black text-lg text-neutral-900 dark:text-white mb-2">{{
-                                    t('deleteAllData') }}</h3>
-                                <p class="text-neutral-600 dark:text-neutral-400 mb-4 font-medium">
-                                    {{ t('deleteAllDataDescription') }}
-                                </p>
-                                <button @click="openDeleteAllDataModal"
-                                    class="px-6 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all flex items-center gap-2">
-                                    <Trash2 :size="20" />
-                                    {{ t('deleteAllData') }}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Delete All Data Modal -->
-                    <Teleport to="body">
-                        <Transition name="fade">
-                            <div v-if="showDeleteAllDataModal"
-                                class="fixed inset-0 z-50 flex items-center justify-center p-4">
-                                <div class="absolute inset-0 bg-neutral-900/80 backdrop-blur-md"
-                                    @click="closeDeleteAllDataModal"></div>
-                                <div
-                                    class="relative z-10 bg-white dark:bg-neutral-800 w-full max-w-lg rounded-4xl p-12 shadow-2xl overflow-hidden">
-                                    <div class="absolute top-0 left-0 right-0 h-2 bg-red-600"></div>
-
-                                    <div class="flex justify-between items-center mb-8">
-                                        <div class="flex items-center gap-3">
-                                            <div class="p-2 rounded-xl bg-red-100 dark:bg-red-900">
-                                                <AlertTriangle :size="24" class="text-red-600 dark:text-red-400"
-                                                    stroke-width="2.5" />
-                                            </div>
-                                            <h2 class="text-2xl font-black text-red-900 dark:text-red-300">{{
-                                                t('deleteAllData') }}
-                                            </h2>
-                                        </div>
-                                        <button @click="closeDeleteAllDataModal"
-                                            class="text-neutral-300 hover:text-neutral-900 dark:hover:text-white transition">
-                                            <X :size="32" />
-                                        </button>
-                                    </div>
-
-                                    <div class="space-y-6">
-                                        <div
-                                            class="bg-red-50 dark:bg-red-950/50 border-2 border-red-200 dark:border-red-900 rounded-2xl p-6">
-                                            <p
-                                                class="text-neutral-800 dark:text-neutral-200 font-bold whitespace-pre-line">
-                                                {{ t('confirmDeleteAllData') }}
-                                            </p>
-                                        </div>
-
-                                        <div class="space-y-2">
-                                            <label
-                                                class="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">
-                                                {{ t('typeDeleteToConfirm') }}
-                                            </label>
-                                            <input v-model="deleteConfirmationText" type="text" placeholder="DELETE"
-                                                class="w-full bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 rounded-3xl px-6 py-4 focus:bg-white dark:focus:bg-neutral-600 focus:border-red-500 transition outline-none font-bold text-lg text-neutral-900 dark:text-white" />
-                                        </div>
-
-                                        <div v-if="deleteAllDataError"
-                                            class="p-4 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-2xl font-bold">
-                                            {{ deleteAllDataError }}
-                                        </div>
-
-                                        <div class="flex gap-3">
-                                            <button @click="deleteAllUserData"
-                                                :disabled="isDeletingAllData || deleteConfirmationText !== 'DELETE'"
-                                                class="flex-1 bg-red-600 text-white py-4 rounded-3xl font-black hover:bg-red-700 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                                <RefreshCw v-if="isDeletingAllData" :size="20" class="animate-spin" />
-                                                <Trash2 v-else :size="20" stroke-width="2.5" />
-                                                {{ isDeletingAllData ? t('deletingAllData') : t('deleteAllData') }}
-                                            </button>
-                                            <button type="button" @click="closeDeleteAllDataModal"
-                                                :disabled="isDeletingAllData"
-                                                class="flex-1 bg-neutral-300 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300 py-4 rounded-3xl font-black hover:bg-neutral-400 dark:hover:bg-neutral-500 transition-all disabled:opacity-50">
-                                                {{ t('cancel') }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </Transition>
-                    </Teleport>
-                </div>
-
-                <!-- Footer -->
-                <SiteFooter />
+                </form>
             </div>
+        </UiSection>
+
+        <!-- Password -->
+        <UiSection :title="t('changePassword')" :icon="KeyRound">
+            <form class="space-y-4" @submit.prevent="changePassword">
+                <UiInput v-model="currentPassword" type="password" :label="t('currentPassword')" required
+                    autocomplete="current-password" />
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <UiInput v-model="newPassword" type="password" :label="t('newPassword')"
+                        :hint="t('passwordMinHint')" required autocomplete="new-password" />
+                    <UiInput v-model="confirmPassword" type="password" :label="t('confirmNewPassword')" required
+                        autocomplete="new-password" />
+                </div>
+
+                <UiAlert v-if="passwordError">{{ passwordError }}</UiAlert>
+                <UiAlert v-if="passwordSuccess" variant="success">{{ t('passwordChanged') }}</UiAlert>
+
+                <div class="flex justify-end">
+                    <UiButton type="submit" :icon="KeyRound" :loading="isSavingPassword"
+                        :disabled="!currentPassword || !newPassword || !confirmPassword">
+                        {{ t('updatePassword') }}
+                    </UiButton>
+                </div>
+            </form>
+        </UiSection>
+
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <!-- Categories -->
+            <UiSection :title="t('yourCategories')" :icon="FolderOpen">
+                <form class="mb-4 flex gap-2" @submit.prevent="handleAddCategory">
+                    <input v-model="newCategoryName" type="text" :placeholder="t('newCategoryName')"
+                        :aria-label="t('newCategoryName')" maxlength="100" :class="inputClass" />
+                    <UiButton type="submit" size="field" :icon="Plus"
+                        :loading="isSavingCategory" :disabled="!newCategoryName.trim()">
+                        {{ t('add') }}
+                    </UiButton>
+                </form>
+
+                <ul class="space-y-2">
+                    <li v-for="category in categories" :key="category.id" :class="rowClass">
+                        <template v-if="editingCategory === category.id">
+                            <input v-model="editingCategoryName" type="text" :aria-label="t('categoryName')"
+                                :class="[inputBaseClass, 'h-9']" @keyup.enter="saveEditCategory(category.id)"
+                                @keyup.esc="cancelEditCategory" />
+                            <UiIconButton :icon="Check" variant="success" :label="t('save')"
+                                @click="saveEditCategory(category.id)" />
+                            <UiIconButton :icon="X" :label="t('cancel')" @click="cancelEditCategory" />
+                        </template>
+                        <template v-else>
+                            <span class="min-w-0 flex-1 truncate py-1.5 text-sm font-semibold text-ink">
+                                {{ category.name }}
+                            </span>
+                            <UiIconButton :icon="Pencil" :label="t('editCategory')"
+                                @click="startEditCategory(category)" />
+                            <UiIconButton :icon="Trash2" variant="danger" :label="t('deleteCategory')"
+                                :loading="isDeletingCategory === category.id" @click="handleDeleteCategory(category)" />
+                        </template>
+                    </li>
+                </ul>
+
+                <p v-if="categories.length === 0" class="py-6 text-center text-sm text-ink-faint">
+                    {{ t('noCategories') }}
+                </p>
+            </UiSection>
+
+            <!-- Tags -->
+            <UiSection :title="t('yourTags')" :icon="Tags">
+                <form class="mb-4 flex gap-2" @submit.prevent="handleAddTag">
+                    <input v-model="newTagName" type="text" :placeholder="t('newTagName')"
+                        :aria-label="t('newTagName')" maxlength="50" :class="inputClass" />
+                    <input v-model="newTagColor" type="color" :aria-label="t('tagColor')" :title="t('tagColor')"
+                        :class="[colorInputClass, 'size-11']" />
+                    <UiButton type="submit" size="field" :icon="Plus" :loading="isSavingTag"
+                        :disabled="!newTagName.trim()">
+                        {{ t('add') }}
+                    </UiButton>
+                </form>
+
+                <ul class="space-y-2">
+                    <li v-for="tag in tags" :key="tag.id" :class="rowClass">
+                        <template v-if="editingTag === tag.id">
+                            <input v-model="editingTagColor" type="color" :aria-label="t('tagColor')"
+                                :class="[colorInputClass, 'size-9']" />
+                            <input v-model="editingTagName" type="text" :aria-label="t('newTagName')"
+                                :class="[inputBaseClass, 'h-9']" @keyup.enter="saveEditTag(tag.id)"
+                                @keyup.esc="cancelEditTag" />
+                            <UiIconButton :icon="Check" variant="success" :label="t('save')"
+                                @click="saveEditTag(tag.id)" />
+                            <UiIconButton :icon="X" :label="t('cancel')" @click="cancelEditTag" />
+                        </template>
+                        <template v-else>
+                            <span class="min-w-0 flex-1 py-1.5">
+                                <TagChip :tag="tag" class="text-sm" />
+                            </span>
+                            <UiIconButton :icon="Pencil" :label="t('edit')" @click="startEditTag(tag)" />
+                            <UiIconButton :icon="Trash2" variant="danger" :label="t('delete')"
+                                :loading="isDeletingTag === tag.id" @click="handleDeleteTag(tag)" />
+                        </template>
+                    </li>
+                </ul>
+
+                <p v-if="tags.length === 0" class="py-6 text-center text-sm text-ink-faint">{{ t('noTags') }}</p>
+            </UiSection>
         </div>
-    </div>
+
+        <!-- Active habits -->
+        <UiSection :title="`${t('yourHabits')} (${habits.length})`" :icon="ListChecks">
+            <p v-if="habits.length > 1" class="mb-3 text-sm text-ink-soft">{{ t('habitOrderHint') }}</p>
+            <TransitionGroup tag="ul" class="space-y-2" move-class="transition-transform duration-200">
+                <li v-for="(habit, index) in habits" :key="habit.id" :class="habitRowClass">
+                    <!-- Order used on the dashboard (within each category) -->
+                    <div class="-my-1 -ml-1 flex shrink-0 flex-col">
+                        <UiIconButton :icon="ChevronUp" size="sm" :label="t('moveUp')" :disabled="index === 0"
+                            @click="handleMoveHabit(habit, -1)" />
+                        <UiIconButton :icon="ChevronDown" size="sm" :label="t('moveDown')"
+                            :disabled="index === habits.length - 1" @click="handleMoveHabit(habit, 1)" />
+                    </div>
+                    <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" />
+
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-semibold text-ink">{{ habit.name }}</p>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span :class="metaChipClass">{{ t(habit.habit_type) }}</span>
+                            <span v-if="habit.category"
+                                class="rounded-full bg-primary-500/10 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
+                                {{ habit.category.name }}
+                            </span>
+                            <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" removable
+                                :remove-label="t('removeTag')" @remove="removeTagFromHabit(habit, tag.id)" />
+
+                            <!-- Add tag -->
+                            <UiDropdown align="left" width="w-52" @open="tagSearchQuery = ''">
+                                <template #trigger="{ toggle }">
+                                    <button type="button" :title="t('addTag')" :aria-label="t('addTag')"
+                                        class="inline-flex h-5 items-center gap-0.5 rounded-full border border-dashed border-line-strong px-1.5 text-xs font-semibold text-ink-faint transition-colors hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                                        @click="toggle">
+                                        <Plus :size="12" stroke-width="2.5" />
+                                        <Tags :size="12" stroke-width="2.25" />
+                                    </button>
+                                </template>
+
+                                <template #default="{ close }">
+                                    <div class="relative mb-1">
+                                        <Search :size="14"
+                                            class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-faint" />
+                                        <input v-model="tagSearchQuery" type="search" :placeholder="t('searchTags')"
+                                            :class="[inputBaseClass, 'h-9 pl-8']" />
+                                    </div>
+                                    <div class="max-h-40 overflow-y-auto">
+                                        <button v-for="tag in availableTags(habit)" :key="tag.id" type="button"
+                                            :style="{ '--tag': tag.color }"
+                                            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium text-ink transition-colors hover:bg-sunken"
+                                            @click="addTagToHabit(habit, tag.id); close()">
+                                            <span class="size-2.5 shrink-0 rounded-full bg-(--tag)"></span>
+                                            <span class="truncate">{{ tag.name }}</span>
+                                        </button>
+                                        <p v-if="availableTags(habit).length === 0"
+                                            class="px-2.5 py-2 text-sm text-ink-faint">
+                                            {{ t('noTagsFound') }}
+                                        </p>
+                                    </div>
+                                </template>
+                            </UiDropdown>
+                        </div>
+                    </div>
+
+                    <div class="flex shrink-0 flex-col sm:flex-row">
+                        <UiIconButton :icon="Pencil" :label="t('editHabit')" @click="startEditHabit(habit)" />
+                        <UiIconButton :icon="Archive" :label="t('archiveHabit')" @click="handleArchiveHabit(habit)" />
+                        <UiIconButton :icon="Trash2" variant="danger" :label="t('deleteHabitPermanently')"
+                            @click="handleDeleteHabit(habit, false)" />
+                    </div>
+                </li>
+            </TransitionGroup>
+
+            <p v-if="habits.length === 0" class="py-6 text-center text-sm text-ink-faint">
+                {{ t('noHabitsProfile') }}
+            </p>
+        </UiSection>
+
+        <!-- Archived habits -->
+        <UiSection :title="`${t('archivedHabits')} (${archivedHabits.length})`" :icon="Archive">
+            <ul class="space-y-2">
+                <li v-for="habit in archivedHabits" :key="habit.id" :class="habitRowClass">
+                    <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" class="opacity-70" />
+
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-semibold text-ink-soft">{{ habit.name }}</p>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span :class="metaChipClass">{{ t(habit.habit_type) }}</span>
+                            <span v-if="habit.category"
+                                class="rounded-full bg-primary-500/10 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
+                                {{ habit.category.name }}
+                            </span>
+                            <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
+                        </div>
+                    </div>
+
+                    <div class="flex shrink-0 flex-col sm:flex-row">
+                        <UiIconButton :icon="Pencil" :label="t('editHabit')" @click="startEditHabit(habit)" />
+                        <UiIconButton :icon="ArchiveRestore" :label="t('unarchiveHabit')"
+                            @click="handleUnarchive(habit)" />
+                        <UiIconButton :icon="Trash2" variant="danger" :label="t('deleteHabitPermanently')"
+                            @click="handleDeleteHabit(habit, true)" />
+                    </div>
+                </li>
+            </ul>
+
+            <p v-if="archivedHabits.length === 0" class="py-6 text-center text-sm text-ink-faint">
+                {{ t('noArchivedHabits') }}
+            </p>
+        </UiSection>
+
+        <!-- Danger zone -->
+        <UiSection :title="t('dangerZone')" :icon="TriangleAlert" tone="danger">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                    <h3 class="font-semibold text-ink">{{ t('deleteAllData') }}</h3>
+                    <p class="mt-1 text-sm text-ink-soft">{{ t('deleteAllDataDescription') }}</p>
+                </div>
+                <UiButton variant="danger" :icon="Trash2" @click="openDeleteAllDataModal">
+                    {{ t('deleteAllData') }}
+                </UiButton>
+            </div>
+        </UiSection>
+
+        <!-- Edit habit -->
+        <HabitFormModal :open="!!editingHabit" :habit="editingHabit" :saving="isSavingHabit" :error="habitFormError"
+            @close="editingHabit = null" @save="saveEditHabit" />
+
+        <!-- Delete all data -->
+        <UiModal :open="showDeleteAllDataModal" :title="t('deleteAllData')" :icon="TriangleAlert" tone="danger"
+            :busy="isDeletingAllData" @close="closeDeleteAllDataModal">
+            <form id="delete-all-form" class="space-y-5" @submit.prevent="deleteAllUserData">
+                <UiAlert variant="warning">
+                    <p class="whitespace-pre-line">{{ t('confirmDeleteAllData') }}</p>
+                </UiAlert>
+
+                <UiInput v-model="deleteConfirmationText" :label="t('typeDeleteToConfirm')"
+                    :placeholder="DELETE_KEYWORD" autocomplete="off" spellcheck="false" />
+
+                <UiAlert v-if="deleteAllDataError">{{ deleteAllDataError }}</UiAlert>
+            </form>
+
+            <template #footer>
+                <UiButton variant="secondary" :disabled="isDeletingAllData" @click="closeDeleteAllDataModal">
+                    {{ t('cancel') }}
+                </UiButton>
+                <UiButton type="submit" form="delete-all-form" variant="danger" :icon="Trash2"
+                    :loading="isDeletingAllData" :disabled="!canDeleteAll">
+                    {{ isDeletingAllData ? t('deletingAllData') : t('deleteAllData') }}
+                </UiButton>
+            </template>
+        </UiModal>
+    </PageShell>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
-}
-</style>

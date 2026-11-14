@@ -22,6 +22,19 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ["id", "name", "color"]
 
+    def validate_name(self, value):
+        # (name, user) is unique in the database, but the user is not part of
+        # the payload, so the check has to be made here.
+        request = self.context.get("request")
+        if request is None:
+            return value
+        duplicates = Tag.objects.filter(user=request.user, name=value)
+        if self.instance is not None:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError("You already have a tag with this name.")
+        return value
+
 
 class HabitSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)

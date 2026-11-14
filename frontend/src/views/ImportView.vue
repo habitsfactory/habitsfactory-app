@@ -1,14 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import api from '@/services/api'
-import { useDarkMode } from '@/composables/useDarkMode'
 import { useLanguage } from '@/composables/useLanguage'
-import { Upload, ArrowLeft, CheckCircle, AlertCircle, FileText } from 'lucide-vue-next'
-import SiteFooter from '@/components/SiteFooter.vue'
+import { Upload, FileUp, FileCheck2, FileText } from 'lucide-vue-next'
+import PageShell from '@/components/layout/PageShell.vue'
+import UiSection from '@/components/ui/UiSection.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiAlert from '@/components/ui/UiAlert.vue'
 
-const router = useRouter()
-const { isDark, toggleDarkMode } = useDarkMode()
 const { t } = useLanguage()
 
 // Import state
@@ -17,55 +16,36 @@ const isImporting = ref(false)
 const importResult = ref(null)
 const importError = ref(null)
 const fileInputRef = ref(null)
+const isDragging = ref(false)
 
-// Handle file selection
-const handleFileSelect = (event) => {
-    const file = event.target.files[0]
-    if (file && file.type === 'text/csv') {
+// Browsers disagree on the MIME type of .csv files (Windows often reports
+// "application/vnd.ms-excel" or nothing), so the extension is checked too.
+const isCsvFile = (file) => file.type === 'text/csv' || /\.csv$/i.test(file.name)
+
+const selectFile = (file) => {
+    if (file && isCsvFile(file)) {
         selectedFile.value = file
         importResult.value = null
         importError.value = null
     } else {
-        importError.value = 'Please select a valid CSV file'
+        importError.value = t('invalidCsvFile')
         selectedFile.value = null
     }
+}
+
+// Handle file selection
+const handleFileSelect = (event) => {
+    selectFile(event.target.files[0])
+}
+
+const handleDrop = (event) => {
+    isDragging.value = false
+    selectFile(event.dataTransfer.files[0])
 }
 
 // Trigger file input click
 const triggerFileInput = () => {
     fileInputRef.value?.click()
-}
-
-// Import CSV file
-const importCSV = async () => {
-    if (!selectedFile.value) {
-        importError.value = 'Please select a CSV file first'
-        return
-    }
-
-    isImporting.value = true
-    importError.value = null
-    importResult.value = null
-
-    try {
-        // Read file content
-        const fileContent = await readFileContent(selectedFile.value)
-
-        // Send to backend
-        const response = await api.post('habits/import_csv/', {
-            csv_content: fileContent
-        })
-
-        importResult.value = response.data
-        selectedFile.value = null
-        if (fileInputRef.value) {
-            fileInputRef.value.value = ''
-        }
-    } catch (err) {
-        importError.value = err.response?.data?.error || 'Failed to import data. Please check your CSV format.'
-    } finally {
-        isImporting.value = false
-    }
 }
 
 // Read file content as text
@@ -78,123 +58,98 @@ const readFileContent = (file) => {
     })
 }
 
-const goBack = () => {
-    router.push('/dashboard')
+// Import CSV file
+const importCSV = async () => {
+    if (!selectedFile.value) {
+        importError.value = t('invalidCsvFile')
+        return
+    }
+
+    isImporting.value = true
+    importError.value = null
+    importResult.value = null
+
+    try {
+        const fileContent = await readFileContent(selectedFile.value)
+
+        const response = await api.post('habits/import_csv/', {
+            csv_content: fileContent
+        })
+
+        importResult.value = response.data
+        selectedFile.value = null
+        if (fileInputRef.value) {
+            fileInputRef.value.value = ''
+        }
+    } catch (err) {
+        importError.value = err.response?.data?.error || t('importFailed')
+    } finally {
+        isImporting.value = false
+    }
 }
+
+const resultRows = [
+    { key: 'habits_created', label: 'habitsCreated' },
+    { key: 'habits_updated', label: 'habitsUpdated' },
+    { key: 'completions_created', label: 'completionsCreated' },
+    { key: 'categories_created', label: 'categoriesCreated' },
+    { key: 'tags_created', label: 'tagsCreated' },
+]
+
+const formatRules = ['csvFormatHeaders', 'csvFormatColumns', 'csvFormatDates', 'csvFormatTags', 'csvFormatTypes']
 </script>
 
 <template>
-    <div
-        class="min-h-screen bg-neutral-50 dark:bg-neutral-900 p-6 md:p-12 font-sans text-neutral-900 dark:text-neutral-100 transition-colors duration-300">
-        <div class="max-w-4xl mx-auto">
-            <!-- Header -->
-            <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-                <div>
-                    <button @click="goBack"
-                        class="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors mb-4 font-bold">
-                        <ArrowLeft :size="20" stroke-width="2.5" />
-                        {{ t('returnDashboard') }}
-                    </button>
-                    <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic">
-                        Import Data
-                    </h1>
-                    <p class="text-neutral-400 dark:text-neutral-500 font-medium">Import your habit data from CSV</p>
-                </div>
-            </header>
+    <PageShell :title="t('importTitle')" :description="t('importSubtitle')">
+        <UiSection :title="t('selectCsvFile')" :icon="FileUp">
+            <input ref="fileInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="handleFileSelect" />
 
-            <!-- Main Content -->
-            <div class="space-y-6">
-                <!-- File Upload Section -->
-                <div
-                    class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                    <h2 class="text-2xl font-black text-neutral-900 dark:text-white mb-6">Select CSV File</h2>
+            <!-- Drop zone -->
+            <button type="button" :class="[
+                'flex w-full flex-col items-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors',
+                isDragging
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : selectedFile
+                        ? 'border-emerald-500/60 bg-emerald-500/5'
+                        : 'border-line-strong hover:border-primary-500 hover:bg-sunken/60',
+            ]" @click="triggerFileInput" @dragover.prevent="isDragging = true" @dragleave.prevent="isDragging = false"
+                @drop.prevent="handleDrop">
+                <span :class="[
+                    'inline-flex size-14 items-center justify-center rounded-2xl',
+                    selectedFile ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-primary-500/10 text-primary-600 dark:text-primary-400',
+                ]">
+                    <component :is="selectedFile ? FileCheck2 : Upload" :size="28" stroke-width="2" />
+                </span>
+                <span class="mt-4 max-w-full truncate font-semibold text-ink">
+                    {{ selectedFile ? selectedFile.name : t('clickToSelectCsv') }}
+                </span>
+                <span class="mt-1 text-sm text-ink-faint">
+                    {{ selectedFile ? `${(selectedFile.size / 1024).toFixed(2)} KB` : t('supportedFormat') }}
+                </span>
+            </button>
 
-                    <!-- File Input (Hidden) -->
-                    <input ref="fileInputRef" type="file" accept=".csv" @change="handleFileSelect" class="hidden" />
+            <UiButton class="mt-5" size="lg" block :icon="Upload" :loading="isImporting" :disabled="!selectedFile"
+                @click="importCSV">
+                {{ isImporting ? t('importing') : t('importButton') }}
+            </UiButton>
+        </UiSection>
 
-                    <!-- File Drop Zone -->
-                    <div @click="triggerFileInput"
-                        class="border-2 border-dashed border-neutral-300 dark:border-neutral-600 rounded-3xl p-12 text-center cursor-pointer hover:border-primary-500 dark:hover:border-primary-400 transition-colors">
-                        <Upload :size="48" class="mx-auto mb-4 text-neutral-400" stroke-width="2" />
-                        <p class="text-lg font-bold text-neutral-900 dark:text-white mb-2">
-                            {{ selectedFile ? selectedFile.name : 'Click to select CSV file' }}
-                        </p>
-                        <p class="text-sm text-neutral-500">
-                            {{ selectedFile ? `${(selectedFile.size / 1024).toFixed(2)} KB` : 'Supported format: CSV' }}
-                        </p>
-                    </div>
+        <UiAlert v-if="importResult" variant="success" :title="t('importSuccess')">
+            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+                <template v-for="row in resultRows" :key="row.key">
+                    <dt>{{ t(row.label) }}</dt>
+                    <dd class="font-semibold tabular-nums">{{ importResult[row.key] || 0 }}</dd>
+                </template>
+            </dl>
+        </UiAlert>
 
-                    <!-- Import Button -->
-                    <button @click="importCSV" :disabled="!selectedFile || isImporting"
-                        class="w-full mt-6 bg-primary-600 text-white py-4 rounded-2xl font-black hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        <Upload :size="20" />
-                        {{ isImporting ? 'Importing...' : 'Import Data' }}
-                    </button>
-                </div>
+        <UiAlert v-if="importError" :title="t('importFailedTitle')">{{ importError }}</UiAlert>
 
-                <!-- Success Message -->
-                <div v-if="importResult"
-                    class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-3xl p-6">
-                    <div class="flex items-start gap-3">
-                        <CheckCircle :size="24" class="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                        <div class="flex-1">
-                            <h3 class="text-lg font-black text-green-900 dark:text-green-100 mb-2">Import Successful!
-                            </h3>
-                            <div class="space-y-1 text-sm text-green-800 dark:text-green-200">
-                                <p><strong>Habits created:</strong> {{ importResult.habits_created }}</p>
-                                <p><strong>Habits updated:</strong> {{ importResult.habits_updated }}</p>
-                                <p><strong>Completions created:</strong> {{ importResult.completions_created }}</p>
-                                <p><strong>Categories created:</strong> {{ importResult.categories_created || 0 }}</p>
-                                <p><strong>Tags created:</strong> {{ importResult.tags_created || 0 }}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Error Message -->
-                <div v-if="importError"
-                    class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-3xl p-6">
-                    <div class="flex items-start gap-3">
-                        <AlertCircle :size="24" class="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                        <div class="flex-1">
-                            <h3 class="text-lg font-black text-red-900 dark:text-red-100 mb-2">Import Failed</h3>
-                            <p class="text-sm text-red-800 dark:text-red-200">{{ importError }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Instructions -->
-                <div
-                    class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-3xl p-8 shadow-lg">
-                    <div class="flex items-start gap-3 mb-4">
-                        <FileText :size="24" class="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                        <div class="flex-1">
-                            <h3 class="text-xl font-black text-blue-900 dark:text-blue-100 mb-3">CSV Format Instructions
-                            </h3>
-                            <div class="space-y-2 text-sm text-blue-800 dark:text-blue-200">
-                                <p>Your CSV file should follow this format:</p>
-                                <ul class="list-disc list-inside space-y-1 ml-4">
-                                    <li><strong>First row:</strong> Column headers</li>
-                                    <li><strong>Columns 1-8:</strong> Habit Name, Type, Color, Icon, Category, Tags,
-                                        Unit, Max Value</li>
-                                    <li><strong>Remaining columns:</strong> Dates (YYYY-MM-DD format) with completion
-                                        values</li>
-                                    <li><strong>Tags:</strong> Multiple tags separated by colon (:)</li>
-                                    <li><strong>Type:</strong> boolean, counter, value, or rating</li>
-                                </ul>
-                                <p class="mt-3 font-bold">Note: Export your data to see the correct format!</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Footer -->
-                <SiteFooter />
-            </div>
-        </div>
-    </div>
+        <UiSection :title="t('csvFormatTitle')" :description="t('csvFormatIntro')" :icon="FileText">
+            <ul class="list-disc space-y-1.5 pl-5 text-sm text-ink-soft marker:text-primary-500">
+                <li v-for="rule in formatRules" :key="rule">{{ t(rule) }}</li>
+            </ul>
+            <UiAlert variant="info" class="mt-4">{{ t('csvFormatNote') }}</UiAlert>
+        </UiSection>
+    </PageShell>
 </template>
-
-<style scoped>
-/* Add any component-specific styles here */
-</style>

@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.throttling import AnonRateThrottle
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import SiteSettings, InviteLink
 
@@ -121,7 +122,8 @@ class CustomRegisterView(RegisterView):
 
         try:
             invite = InviteLink.objects.get(token=token)
-        except (InviteLink.DoesNotExist, ValueError):
+        # A malformed token raises ValidationError (not a valid UUID)
+        except (InviteLink.DoesNotExist, ValueError, ValidationError):
             return Response(
                 {"detail": "Invalid invite link."},
                 status=status.HTTP_403_FORBIDDEN,

@@ -2,7 +2,7 @@ export const en = {
     // Header
     appName: 'Habits Factory',
     tagline: 'Daily evolution, quantified.',
-    newHabit: 'Habit',
+    newHabit: 'New habit',
     logout: 'Logout',
     darkMode: 'Dark Mode',
     lightMode: 'Light Mode',
@@ -19,6 +19,7 @@ export const en = {
     counter: 'Counter',
     value: 'Value',
     rating: 'Rating',
+    percentage: 'Percentage',
 
     // Actions
     markComplete: 'Mark Complete',
@@ -52,7 +53,7 @@ export const en = {
     numberOfStars: 'Number of Stars',
     category: 'Category',
     identityColor: 'Identity Color',
-    initiateHabit: 'Initiate Habit',
+    initiateHabit: 'Create habit',
 
     // Graph
     dateRange: 'Date Range',
@@ -62,6 +63,7 @@ export const en = {
     counterHabits: 'Counter Habits',
     valueHabits: 'Value Habits',
     ratingHabits: 'Rating Habits',
+    percentageHabits: 'Percentage Habits',
     noData: 'No data for this date & time range',
 
     // Export
@@ -285,4 +287,134 @@ export const en = {
     deletingAllData: 'Deleting all data...',
     typeDeleteToConfirm: 'Type DELETE to confirm',
     confirmationMismatch: 'Confirmation text does not match',
+
+    // Common
+    close: 'Close',
+    confirm: 'Confirm',
+    delete: 'Delete',
+    edit: 'Edit',
+    archive: 'Archive',
+    account: 'Account',
+    saveFailed: 'Something went wrong. Please try again.',
+    loadFailed: 'Could not load your data. Check your connection and try again.',
+    deleteFailed: 'Could not delete this item. Please try again.',
+    quickSelect: 'Quick select',
+    dragToReorder: 'Drag to reorder',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    habitOrderHint: 'Use the arrows to choose the order your habits appear in on the dashboard.',
+    currentStreak: 'Streak',
+    currentStreakHint: 'Consecutive days completed, up to the end of the period',
+    bestStreak: 'Record',
+    bestStreakHint: 'Longest run of consecutive days in the period',
+    increase: 'Increase',
+    decrease: 'Decrease',
+    notDone: 'Not done',
+
+    // Footer (new)
+    management: 'Management',
+    data: 'Data',
+    support: 'Support',
+    footerTagline: 'Building better routines, one day at a time.',
+
+    // Habit form
+    habitName: 'Habit name',
+    booleanDesc: 'Done or not done',
+    counterDesc: 'Count repetitions',
+    valueDesc: 'Log a measurement',
+    ratingDesc: 'Rate with stars',
+    percentageDesc: 'Score from 0 to 100',
+    starsHint: 'Between 1 and 10 stars',
+    selectIcon: 'Select an icon',
+    noIconsFound: 'No icons found',
+
+    // Tracking (new)
+    dailyProgress: 'Daily progress',
+    progressToday: '{done} of {total} done',
+
+    // Summary (new)
+    completionRate: 'Completion rate',
+    dayStreak: 'Day streak',
+    total: 'Total',
+    average: 'Average',
+    avgPerDay: 'Avg / day',
+    bestDay: 'Best day',
+    highest: 'Highest',
+    averageRating: 'Average rating',
+    averageScore: 'Average score',
+    best: 'Best',
+    lowest: 'Lowest',
+    overDays: 'Over {n} days',
+    trackedDays: 'Tracked {tracked} of {total} days',
+
+    // Graph (new)
+    allTimeTooltip: 'Everything you have tracked',
+
+    // Insights (new)
+    correlation: 'Correlation',
+    strengthVeryStrong: 'Very strong',
+    strengthStrong: 'Strong',
+    strengthModerate: 'Moderate',
+    strengthWeak: 'Weak',
+    strengthVeryWeak: 'Very weak',
+    basedOnDays: 'Based on {n} days',
+
+    // Profile (new)
+    deleteTag: 'Delete tag',
+    addTag: 'Add tag',
+    removeTag: 'Remove tag',
+    tagColor: 'Tag color',
+    noHabitsProfile: 'No habits yet. Create one from the dashboard.',
+
+    // Administration (new)
+    adminOnlyTitle: 'Restricted area',
+    adminOnly: 'This page is only available to administrators.',
+    linkCopied: 'Copied',
+
+    // Export (new)
+    exportTitle: 'Export data',
+    exportSubtitle: 'Export your habit data to CSV',
+    readyToExport: 'Ready to export?',
+    exportCsv: 'Export CSV',
+    allData: 'All data',
+    invalidDateRange: 'Please select a valid date range',
+    exportFailed: 'Failed to export data. Please try again.',
+
+    // Import (new)
+    importTitle: 'Import data',
+    importSubtitle: 'Import your habit data from CSV',
+    selectCsvFile: 'Select a CSV file',
+    clickToSelectCsv: 'Click or drop a CSV file here',
+    supportedFormat: 'Supported format: CSV',
+    importButton: 'Import data',
+    importing: 'Importing...',
+    importSuccess: 'Import successful',
+    importFailedTitle: 'Import failed',
+    importFailed: 'Failed to import data. Please check your CSV format.',
+    invalidCsvFile: 'Please select a valid CSV file',
+    habitsCreated: 'Habits created',
+    habitsUpdated: 'Habits updated',
+    completionsCreated: 'Completions created',
+    categoriesCreated: 'Categories created',
+    tagsCreated: 'Tags created',
+    csvFormatTitle: 'CSV format',
+    csvFormatIntro: 'Your CSV file should follow this format:',
+    csvFormatHeaders: 'First row: column headers',
+    csvFormatColumns: 'Columns 1–8: Habit Name, Type, Color, Icon, Category, Tags, Unit, Max Value',
+    csvFormatDates: 'Remaining columns: dates (YYYY-MM-DD) with completion values',
+    csvFormatTags: 'Tags: multiple tags separated by a colon (:)',
+    csvFormatTypes: 'Type: boolean, counter, value, rating or percentage',
+    csvFormatNote: 'Tip: export your data first to see the exact format.',
+
+    // Register (new)
+    usernamePlaceholder: 'Choose a username',
+    passwordMinHint: 'At least 8 characters',
+    register: 'Create account',
+    creatingAccount: 'Creating account...',
+    registrationFailed: 'Registration failed. Please try again.',
+    initialSetup: 'Initial setup',
+    checkingSetup: 'Checking setup status...',
+    adminSetupInfo: 'Create your administrator account to get started. This account will have full access to manage the application.',
+    createAdminAccount: 'Create administrator account',
+    creatingAdmin: 'Creating administrator...',
 }

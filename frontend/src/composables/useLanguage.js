@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { translations } from '@/composables/translations'
 
 const supportedLanguages = ['en', 'fr']
@@ -22,28 +22,41 @@ const getInitialLanguage = () => {
 
 const currentLanguage = ref(getInitialLanguage())
 
+const languages = [
+    { code: 'en', name: 'English' },
+    { code: 'fr', name: 'Français' },
+]
+
+watchEffect(() => {
+    document.documentElement.lang = currentLanguage.value
+})
+
 export const useLanguage = () => {
     const setLanguage = (lang) => {
         currentLanguage.value = lang
         localStorage.setItem('language', lang)
     }
 
-    const languages = [
-        { code: 'en', name: 'English', flag: '🇺🇸' },
-        { code: 'fr', name: 'Français', flag: '🇫🇷' },
-    ]
-
     const currentLanguageInfo = computed(() => {
         return languages.find(lang => lang.code === currentLanguage.value) || languages[0]
     })
 
-    // Get translation function
-    const t = (key) => {
-        return translations[currentLanguage.value]?.[key] || translations['en'][key] || key
+    // Translate a key. `params` fills `{placeholders}` in the string:
+    //   t('trackedDays', { tracked: 4, total: 30 })
+    const t = (key, params) => {
+        let text = translations[currentLanguage.value]?.[key] || translations['en'][key] || key
+        if (params) {
+            for (const [name, value] of Object.entries(params)) {
+                text = text.replaceAll(`{${name}}`, value)
+            }
+        }
+        return text
     }
 
     return {
         currentLanguage,
+        // BCP 47 tag for Intl / toLocaleDateString
+        locale: currentLanguage,
         setLanguage,
         languages,
         currentLanguageInfo,

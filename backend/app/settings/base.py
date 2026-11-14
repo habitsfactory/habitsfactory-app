@@ -157,6 +157,8 @@ AXES_RESET_ON_SUCCESS = True     # reset failure count on successful login
 AXES_ENABLE_ADMIN = True         # show lockout records in Django admin
 REST_AUTH = {
     "USE_JWT": True,
+    # Changing the password requires the current one
+    "OLD_PASSWORD_FIELD_ENABLED": True,
     "JWT_AUTH_HTTPONLY": False,
     "JWT_AUTH_COOKIE": "auth-token",
     "JWT_AUTH_REFRESH_COOKIE": "refresh-token",

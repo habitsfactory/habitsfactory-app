@@ -1,0 +1,104 @@
+# Local test stack: same layout as docker-compose.yml (Postgres + Gunicorn +
+# nginx, production settings), but the images are BUILT FROM THIS CHECKOUT
+# instead of pulled from the registry, and no .env file is needed.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#   -> http://localhost:8084   (first run: create the admin at /register-admin)
+#
+#   docker compose -f docker-compose.dev.yml down        # stop, keep the data
+#   docker compose -f docker-compose.dev.yml down -v     # stop and wipe the data
+#
+# It uses its own project name, containers and volumes, so it never touches a
+# production stack running on the same machine. The credentials below are
+# throwaway values for local use only.
+
+name: habitsfactory-dev
+
+x-backend: &backend
+  build:
+    context: ./backend
+  image: habitsfactory-backend:dev
+  environment: &backend-env
+    DJANGO_SETTINGS_MODULE: app.settings.production
+    SECRET_KEY: dev-only-secret-key-do-not-use-in-production
+    APP_URL: http://localhost:8084
+    DB_NAME: habitsfactory
+    DB_USER: postgres
+    DB_PASSWORD: dev-password
+    DB_HOST: db
+    DB_PORT: 5432
+    TZ: ${TZ:-UTC}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: habitsfactory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev-password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d habitsfactory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    <<: *backend
+    volumes:
+      # Shared with the backend so it can serve what collectstatic produced
+      - staticfiles:/app/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput"
+    restart: "no"
+
+  backend:
+    <<: *backend
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      default:
+        aliases:
+          # frontend/nginx.conf proxies /api/ to this hostname
+          - habitsfactory_backend
+    command: >
+      gunicorn --bind 0.0.0.0:8000 --workers 2 --timeout 120 --access-logfile - --error-logfile - app.wsgi:application
+
+  frontend:
+    build:
+      context: ./frontend
+    image: habitsfactory-frontend:dev
+    ports:
+      - "8084:80"
+    depends_on:
+      - backend
+
+  scheduler:
+    # Runs the correlation job (Insights tab) once on startup, then every 24 hours.
+    <<: *backend
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: >
+      sh -c "while true; do
+        python manage.py compute_correlations;
+        sleep 86400;
+      done"
+
+volumes:
+  postgres_data:
+  staticfiles:
+  media:

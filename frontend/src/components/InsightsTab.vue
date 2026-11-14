@@ -1,11 +1,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useLanguage } from '@/composables/useLanguage'
-import * as LucideIcons from 'lucide-vue-next'
-import { RefreshCw } from 'lucide-vue-next'
+import { notifyError } from '@/composables/useToast'
+import { Lightbulb, Link2, CalendarDays } from 'lucide-vue-next'
 import api from '@/services/api'
+import { parseISODate } from '@/utils/dates'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmptyState from '@/components/ui/UiEmptyState.vue'
+import HabitIcon from '@/components/habits/HabitIcon.vue'
 
-const { t } = useLanguage()
+const { t, locale } = useLanguage()
 
 // Insights state
 const insightsData = ref([])
@@ -24,44 +28,28 @@ const fetchInsightsData = async () => {
         insightsData.value = response.data.insights || []
     } catch (err) {
         insightsData.value = []
+        notifyError(err, 'loadFailed')
     } finally {
         isFetchingInsights.value = false
     }
 }
 
-// Get icon component from name
-const getIcon = (iconName) => {
-    if (!iconName) return LucideIcons.Calendar
-    const pascalCase = iconName
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('')
-    return LucideIcons[pascalCase] || LucideIcons.Calendar
+// Badge color + translation key per correlation strength
+const strengths = {
+    very_strong: { key: 'strengthVeryStrong', class: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
+    strong: { key: 'strengthStrong', class: 'bg-primary-500/10 text-primary-700 dark:text-primary-300' },
+    moderate: { key: 'strengthModerate', class: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+    weak: { key: 'strengthWeak', class: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+    very_weak: { key: 'strengthVeryWeak', class: 'bg-sunken text-ink-soft' },
 }
 
-// Helper function to get correlation badge color
-const getCorrelationBadgeColor = (strength) => {
-    const colors = {
-        'very_strong': 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300',
-        'strong': 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
-        'moderate': 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
-        'weak': 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300',
-        'very_weak': 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
-    }
-    return colors[strength] || colors['moderate']
-}
+const strengthOf = (insight) => strengths[insight.strength] || strengths.moderate
 
-// Helper function to get strength label
-const getStrengthLabel = (strength) => {
-    const labels = {
-        'very_strong': 'Very Strong',
-        'strong': 'Strong',
-        'moderate': 'Moderate',
-        'weak': 'Weak',
-        'very_weak': 'Very Weak'
-    }
-    return labels[strength] || 'Moderate'
-}
+const formatDate = (value) => parseISODate(value).toLocaleDateString(locale.value, {
+    year: 'numeric', month: 'short', day: 'numeric'
+})
+
+defineExpose({ fetchInsightsData })
 
 onMounted(() => {
     fetchInsightsData()
@@ -70,119 +58,70 @@ onMounted(() => {
 
 <template>
     <div class="space-y-6">
-        <!-- Insights Header -->
-        <div class="bg-linear-to-r from-primary-600 to-neutral-950 rounded-4xl p-6 shadow-xl">
-            <h2 class="text-3xl font-black text-white mb-2">{{ t('insights') }}</h2>
-            <p class="text-primary-100 font-medium">{{ t('discoverCorrelations') }}</p>
-        </div>
-
-        <!-- Loading State for Insights -->
-        <div v-if="isFetchingInsights" class="flex items-center justify-center py-20">
-            <div class="text-center">
-                <RefreshCw :size="40" class="animate-spin text-primary-500 mx-auto mb-4" />
-                <p class="text-neutral-600 dark:text-neutral-400 font-bold">{{ t('loading') }}</p>
+        <!-- Header -->
+        <section
+            class="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary-600 to-primary-950 p-5 text-white shadow-md sm:p-6">
+            <Lightbulb :size="170" stroke-width="1.5"
+                class="pointer-events-none absolute -right-6 -bottom-10 text-white/10" />
+            <div class="relative">
+                <h2 class="font-display text-3xl font-bold tracking-wide uppercase">{{ t('habitInsights') }}</h2>
+                <p class="mt-1 text-sm text-primary-100">{{ t('discoverCorrelations') }}</p>
             </div>
-        </div>
+        </section>
 
-        <!-- Insights Content -->
-        <div v-else-if="insightsData.length > 0" class="space-y-6">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div v-for="(insight, index) in insightsData" :key="index"
-                    class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700 hover:shadow-xl transition-all">
+        <UiSpinner v-if="isFetchingInsights && insightsData.length === 0" :label="t('loading')" />
 
-                    <!-- Correlation Badge -->
-                    <div class="flex items-center justify-between mb-6">
-                        <span :class="getCorrelationBadgeColor(insight.strength)"
-                            class="px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider">
-                            {{ getStrengthLabel(insight.strength) }}
-                        </span>
-                        <span class="text-3xl font-black text-primary-600 dark:text-primary-400">
-                            {{ (insight.max_correlation * 100).toFixed(0) }}%
-                        </span>
-                    </div>
-
-                    <!-- Habit Pair Display -->
-                    <div class="space-y-4 mb-6">
-                        <!-- Habit 1 -->
-                        <div class="flex items-center gap-4 p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                            <div class="p-3 rounded-xl" :style="{ backgroundColor: insight.habit1.color + '20' }">
-                                <component :is="getIcon(insight.habit1.icon)" :size="24"
-                                    :style="{ color: insight.habit1.color }" stroke-width="2.5" />
-                            </div>
-                            <div class="flex-1">
-                                <h4 class="font-black text-neutral-900 dark:text-white text-lg">
-                                    {{ insight.habit1.name }}
-                                </h4>
-                                <p v-if="insight.habit1.category"
-                                    class="text-xs font-bold text-neutral-400 uppercase tracking-wide">
-                                    {{ insight.habit1.category }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Connection Arrow -->
-                        <div class="flex justify-center">
-                            <div class="bg-linear-to-r from-primary-600 to-primary-950 text-white p-3 rounded-full">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <polyline points="19 12 12 19 5 12"></polyline>
-                                </svg>
-                            </div>
-                        </div>
-
-                        <!-- Habit 2 -->
-                        <div class="flex items-center gap-4 p-4 bg-neutral-50 dark:bg-neutral-700 rounded-2xl">
-                            <div class="p-3 rounded-xl" :style="{ backgroundColor: insight.habit2.color + '20' }">
-                                <component :is="getIcon(insight.habit2.icon)" :size="24"
-                                    :style="{ color: insight.habit2.color }" stroke-width="2.5" />
-                            </div>
-                            <div class="flex-1">
-                                <h4 class="font-black text-neutral-900 dark:text-white text-lg">
-                                    {{ insight.habit2.name }}
-                                </h4>
-                                <p v-if="insight.habit2.category"
-                                    class="text-xs font-bold text-neutral-400 uppercase tracking-wide">
-                                    {{ insight.habit2.category }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Description -->
-                    <div
-                        class="p-4 bg-linear-to-r from-primary-50 to-purple-50 dark:from-primary-950 dark:to-purple-950 rounded-2xl">
-                        <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300 leading-relaxed">
-                            {{ insight.description }}
-                        </p>
-                    </div>
-
-                    <!-- Stats Footer -->
-                    <div
-                        class="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-700 flex justify-between items-center">
-                        <span class="text-xs font-bold text-neutral-400">
-                            Based on {{ insight.sample_size }} days
-                        </span>
-                        <span class="text-xs font-bold text-neutral-400">
-                            {{ new Date(insight.start_date).toLocaleDateString() }} -
-                            {{ new Date(insight.end_date).toLocaleDateString() }}
-                        </span>
-                    </div>
+        <div v-else-if="insightsData.length > 0" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <article v-for="(insight, index) in insightsData" :key="index"
+                class="flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-xs">
+                <div class="flex items-center justify-between gap-3">
+                    <span
+                        :class="['rounded-full px-2.5 py-1 text-xs font-semibold tracking-wider uppercase', strengthOf(insight).class]">
+                        {{ t(strengthOf(insight).key) }}
+                    </span>
+                    <span class="font-display text-4xl leading-none font-semibold text-primary-600 tabular-nums dark:text-primary-400"
+                        :title="t('correlation')">
+                        {{ (insight.max_correlation * 100).toFixed(0) }}%
+                    </span>
                 </div>
-            </div>
+
+                <!-- Habit pair -->
+                <div class="my-4">
+                    <template v-for="(habit, position) in [insight.habit1, insight.habit2]" :key="position">
+                        <div v-if="position === 1" class="ml-8 flex h-6 items-center">
+                            <span class="-ml-px h-full w-px bg-line-strong"></span>
+                            <span
+                                class="-ml-3 inline-flex size-6 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-faint">
+                                <Link2 :size="12" stroke-width="2.5" />
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-3 rounded-xl bg-sunken p-3">
+                            <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" />
+                            <div class="min-w-0 flex-1">
+                                <h4 class="truncate text-sm font-semibold text-ink">{{ habit.name }}</h4>
+                                <p v-if="habit.category_name" class="truncate text-xs text-ink-faint">
+                                    {{ habit.category_name }}
+                                </p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <p v-if="insight.description" class="mb-4 text-sm leading-relaxed text-ink-soft">
+                    {{ insight.description }}
+                </p>
+
+                <div
+                    class="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line pt-3 text-xs font-medium text-ink-faint">
+                    <span>{{ t('basedOnDays', { n: insight.sample_size }) }}</span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <CalendarDays :size="13" stroke-width="2.25" />
+                        {{ formatDate(insight.start_date) }} – {{ formatDate(insight.end_date) }}
+                    </span>
+                </div>
+            </article>
         </div>
 
-        <!-- No Insights State -->
-        <div v-else
-            class="bg-white dark:bg-neutral-800 rounded-4xl p-16 shadow-lg border border-neutral-100 dark:border-neutral-700 text-center">
-            <div class="text-6xl mb-4">🔍</div>
-            <h3 class="text-2xl font-black text-neutral-900 dark:text-white mb-2">
-                {{ t('noInsightsYet') }}
-            </h3>
-            <p class="text-neutral-500 dark:text-neutral-400">
-                {{ t('computeCorrelations') }}
-            </p>
-        </div>
+        <UiEmptyState v-else :icon="Lightbulb" :title="t('noInsightsYet')" :description="t('computeCorrelations')" />
     </div>
 </template>

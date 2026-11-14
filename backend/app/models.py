@@ -38,6 +38,8 @@ class Habit(models.Model):
         ("counter", "Counter"),
         ("value", "Decimal Value"),
         ("rating", "Rating"),
+        # A 0-100 score (e.g. a sleep score), entered with a slider
+        ("percentage", "Percentage"),
     ]
     name = models.CharField(max_length=100)
     habit_type = models.CharField(
@@ -64,9 +66,11 @@ class Habit(models.Model):
     )
     archived = models.BooleanField(default=False)
     tags = models.ManyToManyField(Tag, blank=True, related_name="habits")
+    # Position chosen by the user (see HabitViewSet.reorder); ties fall back to name
+    order = models.IntegerField(default=0)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["order", "name"]
 
     def __str__(self):
         return self.name

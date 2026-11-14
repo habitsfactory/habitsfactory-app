@@ -2,7 +2,7 @@ export const fr = {
     // Header
     appName: 'Habits Factory',
     tagline: 'Évolution quotidienne, quantifiée.',
-    newHabit: 'Habitude',
+    newHabit: 'Nouvelle habitude',
     logout: 'Déconnexion',
     darkMode: 'Mode sombre',
     lightMode: 'Mode clair',
@@ -19,6 +19,7 @@ export const fr = {
     counter: 'Compteur',
     value: 'Valeur',
     rating: 'Évaluation',
+    percentage: 'Pourcentage',
 
     // Actions
     markComplete: 'Marquer Terminé',
@@ -52,7 +53,7 @@ export const fr = {
     numberOfStars: 'Nombre d\'Étoiles',
     category: 'Catégorie',
     identityColor: 'Couleur d\'Identité',
-    initiateHabit: 'Créer l\'Habitude',
+    initiateHabit: 'Créer l\'habitude',
 
     // Graph
     dateRange: 'Plage de Dates',
@@ -62,6 +63,7 @@ export const fr = {
     counterHabits: 'Habitudes Compteur',
     valueHabits: 'Habitudes Valeur',
     ratingHabits: 'Habitudes Évaluation',
+    percentageHabits: 'Habitudes Pourcentage',
     noData: 'Aucune donnée pour cette plage de dates',
 
     // Export
@@ -285,4 +287,134 @@ export const fr = {
     deletingAllData: 'Suppression de toutes les données...',
     typeDeleteToConfirm: 'Tapez DELETE pour confirmer',
     confirmationMismatch: 'Le texte de confirmation ne correspond pas',
+
+    // Common
+    close: 'Fermer',
+    confirm: 'Confirmer',
+    delete: 'Supprimer',
+    edit: 'Modifier',
+    archive: 'Archiver',
+    account: 'Compte',
+    saveFailed: 'Une erreur est survenue. Veuillez réessayer.',
+    loadFailed: 'Impossible de charger vos données. Vérifiez votre connexion et réessayez.',
+    deleteFailed: 'La suppression a échoué. Veuillez réessayer.',
+    quickSelect: 'Sélection rapide',
+    dragToReorder: 'Glisser pour réorganiser',
+    moveUp: 'Monter',
+    moveDown: 'Descendre',
+    habitOrderHint: 'Utilisez les flèches pour choisir l\'ordre d\'affichage de vos habitudes sur le tableau de bord.',
+    currentStreak: 'Série',
+    currentStreakHint: 'Jours consécutifs complétés, jusqu\'à la fin de la période',
+    bestStreak: 'Record',
+    bestStreakHint: 'Plus longue série de jours consécutifs sur la période',
+    increase: 'Augmenter',
+    decrease: 'Diminuer',
+    notDone: 'À faire',
+
+    // Footer (new)
+    management: 'Gestion',
+    data: 'Données',
+    support: 'Soutien',
+    footerTagline: 'De meilleures routines, un jour à la fois.',
+
+    // Habit form
+    habitName: 'Nom de l\'habitude',
+    booleanDesc: 'Fait ou pas fait',
+    counterDesc: 'Compter des répétitions',
+    valueDesc: 'Noter une mesure',
+    ratingDesc: 'Noter avec des étoiles',
+    percentageDesc: 'Score de 0 à 100',
+    starsHint: 'Entre 1 et 10 étoiles',
+    selectIcon: 'Choisir une icône',
+    noIconsFound: 'Aucune icône trouvée',
+
+    // Tracking (new)
+    dailyProgress: 'Progression du jour',
+    progressToday: '{done} sur {total} complétées',
+
+    // Summary (new)
+    completionRate: 'Taux de complétion',
+    dayStreak: 'Jours de suite',
+    total: 'Total',
+    average: 'Moyenne',
+    avgPerDay: 'Moy. / jour',
+    bestDay: 'Meilleur jour',
+    highest: 'Maximum',
+    averageRating: 'Évaluation moyenne',
+    averageScore: 'Score moyen',
+    best: 'Meilleure',
+    lowest: 'Plus basse',
+    overDays: 'Sur {n} jours',
+    trackedDays: 'Suivi {tracked} jours sur {total}',
+
+    // Graph (new)
+    allTimeTooltip: 'Tout ce que vous avez suivi',
+
+    // Insights (new)
+    correlation: 'Corrélation',
+    strengthVeryStrong: 'Très forte',
+    strengthStrong: 'Forte',
+    strengthModerate: 'Modérée',
+    strengthWeak: 'Faible',
+    strengthVeryWeak: 'Très faible',
+    basedOnDays: 'Basé sur {n} jours',
+
+    // Profile (new)
+    deleteTag: 'Supprimer l\'étiquette',
+    addTag: 'Ajouter une étiquette',
+    removeTag: 'Retirer l\'étiquette',
+    tagColor: 'Couleur de l\'étiquette',
+    noHabitsProfile: 'Aucune habitude pour le moment. Créez-en une depuis le tableau de bord.',
+
+    // Administration (new)
+    adminOnlyTitle: 'Accès restreint',
+    adminOnly: 'Cette page est réservée aux administrateurs.',
+    linkCopied: 'Copié',
+
+    // Export (new)
+    exportTitle: 'Exporter les données',
+    exportSubtitle: 'Exportez vos données d\'habitudes en CSV',
+    readyToExport: 'Prêt à exporter ?',
+    exportCsv: 'Exporter en CSV',
+    allData: 'Toutes les données',
+    invalidDateRange: 'Veuillez sélectionner une plage de dates valide',
+    exportFailed: 'Échec de l\'exportation. Veuillez réessayer.',
+
+    // Import (new)
+    importTitle: 'Importer des données',
+    importSubtitle: 'Importez vos données d\'habitudes depuis un fichier CSV',
+    selectCsvFile: 'Sélectionner un fichier CSV',
+    clickToSelectCsv: 'Cliquez ou déposez un fichier CSV ici',
+    supportedFormat: 'Format pris en charge : CSV',
+    importButton: 'Importer les données',
+    importing: 'Importation...',
+    importSuccess: 'Importation réussie',
+    importFailedTitle: 'Échec de l\'importation',
+    importFailed: 'Échec de l\'importation. Vérifiez le format de votre fichier CSV.',
+    invalidCsvFile: 'Veuillez sélectionner un fichier CSV valide',
+    habitsCreated: 'Habitudes créées',
+    habitsUpdated: 'Habitudes mises à jour',
+    completionsCreated: 'Entrées créées',
+    categoriesCreated: 'Catégories créées',
+    tagsCreated: 'Étiquettes créées',
+    csvFormatTitle: 'Format CSV',
+    csvFormatIntro: 'Votre fichier CSV doit respecter ce format :',
+    csvFormatHeaders: 'Première ligne : en-têtes de colonnes',
+    csvFormatColumns: 'Colonnes 1 à 8 : Habit Name, Type, Color, Icon, Category, Tags, Unit, Max Value',
+    csvFormatDates: 'Colonnes suivantes : dates (AAAA-MM-JJ) avec les valeurs saisies',
+    csvFormatTags: 'Étiquettes : plusieurs étiquettes séparées par deux-points (:)',
+    csvFormatTypes: 'Type : boolean, counter, value, rating ou percentage',
+    csvFormatNote: 'Astuce : exportez d\'abord vos données pour voir le format exact.',
+
+    // Register (new)
+    usernamePlaceholder: 'Choisissez un nom d\'utilisateur',
+    passwordMinHint: 'Au moins 8 caractères',
+    register: 'Créer le compte',
+    creatingAccount: 'Création du compte...',
+    registrationFailed: 'Échec de l\'inscription. Veuillez réessayer.',
+    initialSetup: 'Configuration initiale',
+    checkingSetup: 'Vérification de la configuration...',
+    adminSetupInfo: 'Créez votre compte administrateur pour commencer. Ce compte aura un accès complet à la gestion de l\'application.',
+    createAdminAccount: 'Créer le compte administrateur',
+    creatingAdmin: 'Création de l\'administrateur...',
 }

@@ -1,35 +1,21 @@
 <script setup>
+// GitHub-style activity calendar: one column per week (Monday first).
+// Ranges of a week or less are shown as a single labelled row instead.
 import { computed } from 'vue'
-import { useDarkMode } from '@/composables/useDarkMode'
-
-const { isDark } = useDarkMode()
+import { useLanguage } from '@/composables/useLanguage'
+import { parseISODate } from '@/utils/dates'
 
 const props = defineProps({
-  // Array of { date: string, value: number } objects
+  // Array of { date: 'YYYY-MM-DD', value: number }, one entry per day, in order
   data: {
     type: Array,
     required: true,
     validator: (value) => value.every(item => 'date' in item && 'value' in item)
   },
-  // Main color for the heatmap (hex or CSS color)
+  // Main color for the heatmap (any CSS color)
   color: {
     type: String,
-    default: '#22c55e' // green-500
-  },
-  // Size of each square in pixels
-  squareSize: {
-    type: Number,
-    default: 12
-  },
-  // Gap between squares in pixels
-  gap: {
-    type: Number,
-    default: 3
-  },
-  // Border radius of squares in pixels
-  borderRadius: {
-    type: Number,
-    default: 2
+    default: '#22c55e'
   },
   // Show tooltips on hover
   showTooltips: {
@@ -38,290 +24,99 @@ const props = defineProps({
   }
 })
 
-// Weekday names (short)
-const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const { locale } = useLanguage()
 
-// Get user's timezone
-const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+// 0 = Monday … 6 = Sunday
+const dayIndex = (date) => (date.getDay() + 6) % 7
 
-// Helper to parse YYYY-MM-DD string as local date using timezone
-const parseLocalDate = (dateStr) => {
-  // Parse the date string in the user's timezone
-  const [year, month, day] = dateStr.split('-').map(Number)
-  // Create date at noon to avoid any DST edge cases
-  const date = new Date(year, month - 1, day, 12, 0, 0)
-  return date
-}
+const isRow = computed(() => props.data.length <= 7)
 
-// Helper to get day index (0 = Monday, 6 = Sunday)
-const getDayIndex = (dateStr) => {
-  const date = parseLocalDate(dateStr)
-  const day = date.getDay()
-  // Convert: Sunday (0) -> 6, Monday (1) -> 0, etc.
-  return day === 0 ? 6 : day - 1
-}
+const maxValue = computed(() => Math.max(1, ...props.data.map(d => d.value)))
 
-// Calculate the max value for intensity scaling
-const maxValue = computed(() => {
-  if (props.data.length === 0) return 1
-  const max = Math.max(...props.data.map(d => d.value))
-  return max > 0 ? max : 1
-})
+const days = computed(() => {
+  const fullFormat = new Intl.DateTimeFormat(locale.value, {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+  })
+  const weekdayFormat = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
 
-// Determine layout mode based on data length
-const layoutMode = computed(() => {
-  const length = props.data.length
-  if (length <= 7) return 'row'       // Single row for week or less
-  return 'calendar'                    // GitHub-style calendar layout
-})
-
-// Get the offset for the first day (days since Monday)
-const firstDayOffset = computed(() => {
-  if (props.data.length === 0 || layoutMode.value === 'row') return 0
-  return getDayIndex(props.data[0].date)
-})
-
-// Calculate number of columns based on layout (accounting for offset)
-const columns = computed(() => {
-  const length = props.data.length
-  if (layoutMode.value === 'row') return length
-  // Calendar mode: account for the offset of the first day
-  return Math.ceil((length + firstDayOffset.value) / 7)
-})
-
-// Generate column headers based on layout mode
-const columnHeaders = computed(() => {
-  if (props.data.length === 0) return []
-
-  if (layoutMode.value === 'row') {
-    // For single row: show weekday names for each date
-    return props.data.map(item => weekDays[getDayIndex(item.date)])
-  } else {
-    // For calendar mode: show the Monday of each week
-    const headers = []
-    const numCols = columns.value
-    const firstDate = parseLocalDate(props.data[0].date)
-
-    // Find the Monday of the first week
-    const firstMonday = new Date(firstDate)
-    firstMonday.setDate(firstDate.getDate() - firstDayOffset.value)
-
-    for (let col = 0; col < numCols; col++) {
-      const weekStart = new Date(firstMonday)
-      weekStart.setDate(firstMonday.getDate() + col * 7)
-      const formatted = weekStart.toLocaleDateString(undefined, {
-        timeZone: userTimeZone,
-        month: 'short',
-        day: 'numeric'
-      })
-      headers.push(formatted)
-    }
-
-    return headers
-  }
-})
-
-// Row labels for calendar mode (weekday names on the left)
-const rowLabels = computed(() => {
-  if (layoutMode.value !== 'calendar') return []
-  return weekDays
-})
-
-// Organize data for calendar layout with correct day-of-week positioning
-const organizedData = computed(() => {
-  if (layoutMode.value !== 'calendar') {
-    return props.data
-  }
-
-  // For calendar layout, place each item in the correct grid position
-  // based on its actual day of week
-  return props.data.map((item, index) => {
-    const dayIndex = getDayIndex(item.date)
-    // Calculate which column this date belongs to
-    const col = Math.floor((index + firstDayOffset.value) / 7)
-
+  return props.data.map(item => {
+    const date = parseISODate(item.date)
     return {
-      ...item,
-      gridColumn: col + 1,
-      gridRow: dayIndex + 1
+      key: item.date,
+      date,
+      weekday: weekdayFormat.format(date),
+      // 0 = empty, otherwise 0.25 → 1 depending on the value
+      opacity: item.value > 0 ? 0.25 + 0.75 * (item.value / maxValue.value) : 0,
+      tooltip: `${fullFormat.format(date)}: ${item.value}`,
     }
   })
 })
 
-// Get color with opacity based on value intensity
-const getSquareColor = (value) => {
-  if (value <= 0) {
-    return ""; // No color for zero or negative values
-  }
-  const intensity = value / maxValue.value
-  // Map intensity to opacity levels (0.2 to 1.0)
-  const opacity = 0.2 + (intensity * 0.8)
+// Blank cells so the first day lands on its weekday row
+const leadingBlanks = computed(() => (days.value.length ? dayIndex(days.value[0].date) : 0))
 
-  return hexToRgba(props.color, opacity)
-}
-
-// Convert hex color to rgba
-const hexToRgba = (hex, alpha) => {
-  // Remove # if present
-  hex = hex.replace('#', '')
-
-  // Handle shorthand hex
-  if (hex.length === 3) {
-    hex = hex.split('').map(c => c + c).join('')
-  }
-
-  const r = parseInt(hex.substring(0, 2), 16)
-  const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(hex.substring(4, 6), 16)
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-// Format date for tooltip
-const formatDate = (dateStr) => {
-  const date = parseLocalDate(dateStr)
-  return date.toLocaleDateString(undefined, {
-    timeZone: userTimeZone,
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
+// One label slot per week column; filled when a new month starts in that week
+const monthLabels = computed(() => {
+  if (!days.value.length) return []
+  const monthFormat = new Intl.DateTimeFormat(locale.value, { month: 'short' })
+  const weeks = Math.ceil((days.value.length + leadingBlanks.value) / 7)
+  const labels = Array(weeks).fill('')
+  let lastMonth = -1
+  let lastLabelWeek = -4
+  days.value.forEach((day, index) => {
+    const month = day.date.getMonth()
+    if (month === lastMonth) return
+    lastMonth = month
+    const week = Math.floor((index + leadingBlanks.value) / 7)
+    // Skip labels that would overlap the previous one
+    if (week - lastLabelWeek >= 3) {
+      labels[week] = monthFormat.format(day.date)
+      lastLabelWeek = week
+    }
   })
-}
-
-// Header container style
-const headerStyle = computed(() => {
-  const cellWidth = props.squareSize + props.gap
-  return {
-    display: 'grid',
-    gridTemplateColumns: `repeat(${columns.value}, ${cellWidth}px)`,
-    marginBottom: '4px',
-    marginLeft: layoutMode.value === 'calendar' ? '20px' : '0'
-  }
+  return labels
 })
 
-// Grid styles
-const gridStyle = computed(() => {
-  const style = {
-    display: 'grid',
-    gap: `${props.gap}px`,
-    width: 'fit-content'
-  }
-
-  if (layoutMode.value === 'calendar') {
-    // For calendar layout, use explicit grid placement (no auto-flow)
-    style.gridTemplateColumns = `repeat(${columns.value}, ${props.squareSize}px)`
-    style.gridTemplateRows = `repeat(7, ${props.squareSize}px)`
-  } else {
-    // Single row
-    style.gridTemplateColumns = `repeat(${columns.value}, ${props.squareSize}px)`
-    style.gridTemplateRows = `${props.squareSize}px`
-  }
-
-  return style
+// Mon / Wed / Fri labels (2024-01-01 is a Monday)
+const weekdayLabels = computed(() => {
+  const format = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => (i % 2 === 0 ? format.format(new Date(2024, 0, 1 + i, 12)) : ''))
 })
-
-// Square styles
-const getSquareStyle = (item) => {
-  const style = {
-    width: `${props.squareSize}px`,
-    height: `${props.squareSize}px`,
-    backgroundColor: getSquareColor(item.value),
-    borderRadius: `${props.borderRadius}px`
-  }
-
-  // For calendar mode, use explicit grid placement
-  if (layoutMode.value === 'calendar' && item.gridColumn && item.gridRow) {
-    style.gridColumn = item.gridColumn
-    style.gridRow = item.gridRow
-  }
-
-  return style
-}
 </script>
 
 <template>
-  <div class="calendar-heatmap p-3">
-    <!-- Column Headers (inclined) -->
-    <div :style="headerStyle" :class="['column-headers', layoutMode === 'calendar' ? 'pl-6' : 'pl-2']">
-      <div v-for="(header, index) in columnHeaders" :key="index" class="header-cell">
-        <span class="header-text text-xs font-semibold text-neutral-500 dark:text-neutral-400">
-          {{ header }}
+  <div class="inline-block" :style="{ '--heat': color }">
+    <!-- A week or less: one row of labelled days -->
+    <div v-if="isRow" class="flex gap-1.5">
+      <div v-for="day in days" :key="day.key" class="flex flex-col items-center gap-1.5">
+        <span class="text-[10px] font-semibold text-ink-faint uppercase">{{ day.weekday }}</span>
+        <span class="relative block size-7 overflow-hidden rounded-md bg-ink/10 transition hover:ring-2 hover:ring-ink-faint"
+          :title="showTooltips ? day.tooltip : undefined">
+          <span class="absolute inset-0 bg-(--heat)" :style="{ opacity: day.opacity }"></span>
         </span>
       </div>
     </div>
 
-    <!-- Main grid with optional row labels -->
-    <div class="grid-container" :class="{ 'with-row-labels': layoutMode === 'calendar' }">
-      <!-- Row labels for calendar mode -->
-      <div v-if="layoutMode === 'calendar'" class="row-labels">
-        <div v-for="(label, index) in rowLabels" :key="index"
-          class="row-label text-xs font-semibold text-neutral-500 dark:text-neutral-400"
-          :style="{ height: `${squareSize}px`, marginBottom: `${gap}px` }">
-          {{ label }}
-        </div>
+    <!-- Longer ranges: weeks as columns -->
+    <div v-else class="flex gap-2">
+      <div class="grid grid-rows-7 gap-[3px] pt-5 text-[10px] leading-[14px] font-semibold text-ink-faint">
+        <span v-for="(label, index) in weekdayLabels" :key="index" class="h-3.5">{{ label }}</span>
       </div>
 
-      <!-- Heatmap grid -->
-      <div :style="gridStyle" class="heatmap-grid">
-        <div v-for="(item, index) in organizedData" :key="item.date || index" :style="getSquareStyle(item)"
-          class="heatmap-square transition-all duration-150 hover:ring-2 hover:ring-offset-1 hover:ring-neutral-400 dark:hover:ring-neutral-500 cursor-default bg-neutral-300 dark:bg-neutral-600"
-          :title="showTooltips ? `${formatDate(item.date)}: ${item.value}` : undefined"></div>
+      <div>
+        <div class="mb-1 grid h-4 auto-cols-[14px] grid-flow-col gap-[3px] text-[10px] leading-4 font-semibold text-ink-faint">
+          <span v-for="(label, index) in monthLabels" :key="index" class="whitespace-nowrap">{{ label }}</span>
+        </div>
+
+        <div class="grid auto-cols-[14px] grid-flow-col grid-rows-7 gap-[3px]">
+          <span v-for="blank in leadingBlanks" :key="`blank-${blank}`" class="size-3.5"></span>
+          <span v-for="day in days" :key="day.key"
+            class="relative block size-3.5 overflow-hidden rounded-[3px] bg-ink/10 transition hover:ring-2 hover:ring-ink-faint"
+            :title="showTooltips ? day.tooltip : undefined">
+            <span class="absolute inset-0 bg-(--heat)" :style="{ opacity: day.opacity }"></span>
+          </span>
+        </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.calendar-heatmap {
-  display: inline-block;
-}
-
-.column-headers {
-  height: 32px;
-}
-
-.header-cell {
-  position: relative;
-  height: 32px;
-}
-
-.header-text {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  transform-origin: bottom left;
-  transform: rotate(-45deg);
-  white-space: nowrap;
-}
-
-.grid-container {
-  display: flex;
-  align-items: flex-start;
-}
-
-.grid-container.with-row-labels {
-  gap: 6px;
-}
-
-.row-labels {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding-right: 2px;
-}
-
-.row-label {
-  display: flex;
-  align-items: center;
-  line-height: 1;
-}
-
-.heatmap-grid {
-  line-height: 0;
-}
-
-.heatmap-square {
-  display: inline-block;
-}
-</style>

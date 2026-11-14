@@ -1,64 +1,89 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useLanguage } from '@/composables/useLanguage'
+import { notifyError } from '@/composables/useToast'
 import { useHabits } from '@/composables/useHabits'
 import { useCategories } from '@/composables/useCategories'
+import { useCategoryDrag } from '@/composables/useCategoryDrag'
 import { useTags } from '@/composables/useTags'
 import { useCookies } from '@/composables/useCookies'
-import * as LucideIcons from 'lucide-vue-next'
-import { RefreshCw, ChevronLeft, ChevronRight, LayoutGrid, List, Star, Plus, Minus, Archive, Trash2, Pencil, CheckCircle2, GripVertical, Filter, ChevronDown, X, Sparkles } from 'lucide-vue-next'
+import { toISODate, addDays, isSameDay } from '@/utils/dates'
+import {
+    ChevronLeft, ChevronRight, LayoutGrid, List, ListFilter, X, Sparkles, PenLine,
+    CircleCheck, LoaderCircle, SearchX, Target, CalendarCheck,
+} from 'lucide-vue-next'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiIconButton from '@/components/ui/UiIconButton.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmptyState from '@/components/ui/UiEmptyState.vue'
+import HabitIcon from '@/components/habits/HabitIcon.vue'
+import HabitControl from '@/components/habits/HabitControl.vue'
+import TagChip from '@/components/habits/TagChip.vue'
+import CategoryHeader from '@/components/habits/CategoryHeader.vue'
 
-const emit = defineEmits(['open-template-modal'])
+const emit = defineEmits(['open-template-modal', 'open-habit-form'])
 
-const { t } = useLanguage()
-const { habits, isLoadingHabits, fetchHabits, archiveHabit, deleteActiveHabit, deleteArchivedHabit, saveCompletion } = useHabits()
-const { categories, categoryOrder, fetchCategories, saveLayoutToServer } = useCategories()
+const { t, locale } = useLanguage()
+const { habits, isLoadingHabits, fetchHabits, saveCompletion } = useHabits()
+const { categories, fetchCategories, groupByCategory } = useCategories()
+const { draggedId, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, moveGroup } = useCategoryDrag()
 const { tags, fetchTags } = useTags()
 const { setCookie, getCookie } = useCookies()
 
-// Date navigation
+// --- Date navigation ---
 const currentTrackingDate = ref(new Date())
 
-// View preference
-const isCardView = ref(true)
+const trackingDateString = computed(() => toISODate(currentTrackingDate.value))
 
-// Dragging for categories
-const draggedCategoryId = ref(null)
-const dragOverCategoryId = ref(null)
+const isToday = computed(() => isSameDay(currentTrackingDate.value, new Date()))
+const isYesterday = computed(() => isSameDay(currentTrackingDate.value, addDays(new Date(), -1)))
 
-// Filter state
+const longDate = computed(() => currentTrackingDate.value.toLocaleDateString(locale.value, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+}))
+
+const dayTitle = computed(() => {
+    if (isToday.value) return t('today')
+    if (isYesterday.value) return t('yesterday')
+    return currentTrackingDate.value.toLocaleDateString(locale.value, { weekday: 'long' })
+})
+
+const goToDate = (date) => {
+    currentTrackingDate.value = date
+    fetchHabits(trackingDateString.value)
+}
+
+const goToPreviousDay = () => goToDate(addDays(currentTrackingDate.value, -1))
+const goToNextDay = () => {
+    if (!isToday.value) goToDate(addDays(currentTrackingDate.value, 1))
+}
+const goToToday = () => goToDate(new Date())
+
+// --- View preference (cards / list), remembered in a cookie ---
+const view = ref(getCookie('viewPreference') === 'row' ? 'row' : 'card')
+watch(view, (value) => setCookie('viewPreference', value))
+
+const viewOptions = computed(() => [
+    { value: 'card', label: t('cardView'), icon: LayoutGrid },
+    { value: 'row', label: t('rowView'), icon: List },
+])
+
+// --- Filters ---
 const isFilterExpanded = ref(false)
 const selectedCategories = ref([])
 const selectedTags = ref([])
-const filterSectionRef = ref(null)
 
+const activeFilterCount = computed(() => selectedCategories.value.length + selectedTags.value.length)
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
 
-const handleClickOutside = (event) => {
-    if (isFilterExpanded.value && filterSectionRef.value && !filterSectionRef.value.contains(event.target)) {
-        isFilterExpanded.value = false
-    }
-}
-
-const hasActiveFilters = computed(() => {
-    return selectedCategories.value.length > 0 || selectedTags.value.length > 0
-})
-
-const toggleCategoryFilter = (categoryId) => {
-    const index = selectedCategories.value.indexOf(categoryId)
-    if (index === -1) {
-        selectedCategories.value.push(categoryId)
-    } else {
-        selectedCategories.value.splice(index, 1)
-    }
-}
-
-const toggleTagFilter = (tagId) => {
-    const index = selectedTags.value.indexOf(tagId)
-    if (index === -1) {
-        selectedTags.value.push(tagId)
-    } else {
-        selectedTags.value.splice(index, 1)
-    }
+const toggleIn = (list, id) => {
+    const index = list.value.indexOf(id)
+    if (index === -1) list.value.push(id)
+    else list.value.splice(index, 1)
 }
 
 const clearFilters = () => {
@@ -66,680 +91,238 @@ const clearFilters = () => {
     selectedTags.value = []
 }
 
-// Load view preference from cookie
-const loadViewPreference = () => {
-    const saved = getCookie('viewPreference')
-    if (saved !== null) {
-        isCardView.value = saved === 'card'
-    }
-}
-
-// Save view preference when it changes
-watch(isCardView, (newValue) => {
-    setCookie('viewPreference', newValue ? 'card' : 'row')
-})
-
-const trackingDateString = computed(() => {
-    return currentTrackingDate.value.toISOString().split('T')[0]
-})
-
-const canGoToNextDay = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const trackingDay = new Date(currentTrackingDate.value)
-    trackingDay.setHours(0, 0, 0, 0)
-    return trackingDay.getTime() < today.getTime()
-})
-
-const formattedTrackingDate = computed(() => {
-    const date = currentTrackingDate.value
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const trackingDay = new Date(date)
-    trackingDay.setHours(0, 0, 0, 0)
-
-    if (trackingDay.getTime() === today.getTime()) {
-        return t('today')
-    }
-
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    if (trackingDay.getTime() === yesterday.getTime()) {
-        return t('yesterday')
-    }
-
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    if (trackingDay.getTime() === tomorrow.getTime()) {
-        return t('tomorrow')
-    }
-
-    return date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    })
-})
-
-// Filter habits based on selected categories and tags
 const filteredHabits = computed(() => {
     let result = habits.value
 
-    // Filter by categories
     if (selectedCategories.value.length > 0) {
-        result = result.filter(h => {
-            if (selectedCategories.value.includes('uncategorized')) {
-                if (!h.category || h.category === null) return true
-            }
-            return h.category && selectedCategories.value.includes(h.category.id)
-        })
+        result = result.filter(h => selectedCategories.value.includes(h.category ? h.category.id : 'uncategorized'))
     }
 
-    // Filter by tags
     if (selectedTags.value.length > 0) {
-        result = result.filter(h => {
-            if (!h.tags || h.tags.length === 0) return false
-            return h.tags.some(tag => selectedTags.value.includes(tag.id))
-        })
+        result = result.filter(h => h.tags?.some(tag => selectedTags.value.includes(tag.id)))
     }
 
     return result
 })
 
-// Group habits by category
-const groupedHabits = computed(() => {
-    const groups = []
+const groupedHabits = computed(() =>
+    groupByCategory(filteredHabits.value, h => h.category?.id ?? null, t('uncategorized'))
+)
 
-    if (filteredHabits.value.length === 0) {
-        return groups
-    }
+// --- Daily progress ---
+const doneCount = computed(() => filteredHabits.value.filter(h => (h.today_value || 0) > 0).length)
+const progress = computed(() =>
+    filteredHabits.value.length ? Math.round((doneCount.value / filteredHabits.value.length) * 100) : 0
+)
 
-    const categoryMap = new Map()
-    categories.value.forEach(cat => {
-        categoryMap.set(cat.id, cat)
-    })
-
-    const uncategorized = filteredHabits.value.filter(h => !h.category || h.category === null)
-    const hasUncategorized = uncategorized.length > 0
-
-    let orderedCategoryIds
-
-    if (categoryOrder.value && categoryOrder.value.length > 0) {
-        orderedCategoryIds = [...categoryOrder.value]
-    } else {
-        orderedCategoryIds = hasUncategorized
-            ? ['uncategorized', ...categories.value.map(c => c.id)]
-            : categories.value.map(c => c.id)
-    }
-
-    orderedCategoryIds.forEach(id => {
-        if (id === 'uncategorized') {
-            if (hasUncategorized) {
-                groups.push({
-                    id: 'uncategorized',
-                    name: t('uncategorized'),
-                    habits: uncategorized
-                })
-            }
-        } else {
-            const cat = categoryMap.get(id)
-            if (cat) {
-                const categoryHabits = filteredHabits.value.filter(h => h.category && h.category.id === cat.id)
-                if (categoryHabits.length > 0) {
-                    groups.push({
-                        id: cat.id,
-                        name: cat.name,
-                        habits: categoryHabits
-                    })
-                }
-            }
-        }
-    })
-
-    return groups
-})
-
-// Navigation functions
-const goToPreviousDay = () => {
-    const newDate = new Date(currentTrackingDate.value)
-    newDate.setDate(newDate.getDate() - 1)
-    currentTrackingDate.value = newDate
-    fetchHabits(trackingDateString.value)
-}
-
-const goToNextDay = () => {
-    if (!canGoToNextDay.value) return
-    const newDate = new Date(currentTrackingDate.value)
-    newDate.setDate(newDate.getDate() + 1)
-    currentTrackingDate.value = newDate
-    fetchHabits(trackingDateString.value)
-}
-
-const goToToday = () => {
-    currentTrackingDate.value = new Date()
-    fetchHabits(trackingDateString.value)
-}
-
-// Get icon component from name
-const getIcon = (iconName) => {
-    if (!iconName) return LucideIcons.Calendar
-    const pascalCase = iconName
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('')
-    return LucideIcons[pascalCase] || LucideIcons.Calendar
-}
-
-// Habit completion handlers
-const toggleBoolean = (habit) => {
-    const newValue = habit.is_completed_today ? 0 : 1
-    saveCompletion(habit, newValue, trackingDateString.value)
-}
-
-const incrementCounter = (habit) => {
-    const newValue = (habit.today_value || 0) + 1
-    habit.temp_value = newValue
-    saveCompletion(habit, newValue, trackingDateString.value)
-}
-
-const decrementCounter = (habit) => {
-    const newValue = Math.max(0, (habit.today_value || 0) - 1)
-    habit.temp_value = newValue
-    saveCompletion(habit, newValue, trackingDateString.value)
-}
-
-const updateValue = (habit, value) => {
-    const numValue = parseFloat(value) || 0
-    habit.temp_value = numValue
-    saveCompletion(habit, numValue, trackingDateString.value)
-}
-
-const setRating = (habit, rating) => {
-    habit.temp_value = rating
-    saveCompletion(habit, rating, trackingDateString.value)
-}
-
-const handleArchive = async (habitId) => {
-    if (confirm(t('confirmArchive'))) {
-        await archiveHabit(habitId)
+// --- Logging ---
+const updateHabitValue = async (habit, value) => {
+    habit.temp_value = value
+    try {
+        await saveCompletion(habit, value, trackingDateString.value)
+    } catch (err) {
+        // Resync with the server if the save failed
+        notifyError(err, 'saveFailed')
+        fetchHabits(trackingDateString.value)
     }
 }
 
-const handleDelete = async (habitId) => {
-    if (confirm(t('confirmDeletePermanent'))) {
-        await deleteActiveHabit(habitId)
-    }
-}
+const filterChipClass = (active) => [
+    'inline-flex h-8 items-center rounded-full border px-3 text-sm font-medium transition-colors',
+    active
+        ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:text-primary-300'
+        : 'border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink',
+]
 
 // Expose refresh method for parent component
 const refreshHabits = () => {
-    fetchHabits(trackingDateString.value)
+    fetchCategories()
+    return fetchHabits(trackingDateString.value)
 }
 
 defineExpose({ refreshHabits })
 
 onMounted(() => {
-    loadViewPreference()
     fetchCategories()
     fetchTags()
     fetchHabits(trackingDateString.value)
-    document.addEventListener('click', handleClickOutside)
 })
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleClickOutside)
-})
-
-// Dragging of categories
-const handleDragStart = (e, categoryId) => {
-    draggedCategoryId.value = categoryId
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/html', e.target.innerHTML)
-    e.target.style.opacity = '0.4'
-}
-
-const handleDragEnd = (e) => {
-    e.target.style.opacity = '1'
-    draggedCategoryId.value = null
-    dragOverCategoryId.value = null
-}
-
-const handleDragOver = (e, categoryId) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    dragOverCategoryId.value = categoryId
-    return false
-}
-
-const handleDragEnter = (e, categoryId) => {
-    e.preventDefault()
-    dragOverCategoryId.value = categoryId
-}
-
-const handleDragLeave = (e) => {
-    // Only set to null if we're leaving the category group itself
-    // Check if we're moving to a non-category element
-    if (e.target.classList && e.target.classList.contains('category-group')) {
-        dragOverCategoryId.value = null
-    }
-}
-
-const handleDrop = (e, targetCategoryId) => {
-    e.stopPropagation()
-    e.preventDefault()
-
-
-    if (!draggedCategoryId.value) {
-        dragOverCategoryId.value = null
-        return
-    }
-
-    if (draggedCategoryId.value === targetCategoryId) {
-        dragOverCategoryId.value = null
-        return
-    }
-
-    const newOrder = [...categoryOrder.value]
-    const draggedIndex = newOrder.indexOf(draggedCategoryId.value)
-    const targetIndex = newOrder.indexOf(targetCategoryId)
-
-
-    if (draggedIndex !== -1 && targetIndex !== -1) {
-        // Remove dragged item
-        newOrder.splice(draggedIndex, 1)
-
-        // Calculate insertion index based on direction
-        let insertIndex
-        if (draggedIndex < targetIndex) {
-            // Dragging forward (from earlier to later)
-            // After removal, target index shifts down by 1, but we want to insert AFTER it
-            insertIndex = targetIndex
-        } else {
-            // Dragging backward (from later to earlier)
-            // Target index doesn't shift, insert before it
-            insertIndex = targetIndex
-        }
-
-        // Insert at calculated position
-        newOrder.splice(insertIndex, 0, draggedCategoryId.value)
-
-
-        categoryOrder.value = newOrder
-        saveLayoutToServer()
-    }
-
-    draggedCategoryId.value = null
-    dragOverCategoryId.value = null
-    return false
-}
 </script>
 
 <template>
-    <div class="space-y-8">
-        <!-- Date Navigation -->
-        <div
-            class="bg-white dark:bg-neutral-800 rounded-4xl py-2 px-6 shadow-lg border border-neutral-100 dark:border-neutral-700 flex items-center justify-between">
-            <button @click="goToPreviousDay"
-                class="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                <ChevronLeft :size="24" class="text-neutral-600 dark:text-neutral-300" stroke-width="2.5" />
-            </button>
-
-            <div class="text-center flex-1">
-                <h2 class="text-2xl font-black text-neutral-900 dark:text-white">{{ formattedTrackingDate }}</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5 font-bold">
-                    {{ currentTrackingDate.toLocaleDateString('fr', {
-                        day: '2-digit', month: '2-digit', year: 'numeric'
-                    }) }}
-                </p>
-                <!-- Today Button (only show if not on today) -->
-                <button v-if="formattedTrackingDate !== t('today')" @click="goToToday"
-                    class="shrink-0 px-3 py-1 mt-1 bg-primary-600 text-white rounded-xl font-bold text-xs md:text-sm hover:bg-primary-800 transition-all active:scale-95 whitespace-nowrap self-center">
-                    {{ t('today') }}
-                </button>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <!-- View Toggle -->
-                <button @click="isCardView = !isCardView"
-                    class="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                    <LayoutGrid v-if="!isCardView" :size="24" class="text-neutral-600 dark:text-neutral-300"
-                        stroke-width="2.5" />
-                    <List v-else :size="24" class="text-neutral-600 dark:text-neutral-300" stroke-width="2.5" />
-                </button>
-
-                <button @click="goToNextDay" :disabled="!canGoToNextDay" :class="[
-                    'p-2 rounded-xl transition-all active:scale-95',
-                    canGoToNextDay
-                        ? 'bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-                        : 'bg-neutral-50 dark:bg-neutral-800 cursor-not-allowed opacity-50'
-                ]">
-                    <ChevronRight :size="24" class="text-neutral-600 dark:text-neutral-300" stroke-width="2.5" />
-                </button>
-            </div>
-        </div>
-
-        <!-- Filter Section -->
-        <div ref="filterSectionRef" class="space-y-2">
-            <!-- Filter Toggle Button -->
-            <button @click="isFilterExpanded = !isFilterExpanded" :class="[
-                'w-full flex items-center justify-between px-6 py-2 rounded-2xl font-bold transition-all',
-                hasActiveFilters
-                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border-2 border-primary-300 dark:border-primary-700'
-                    : 'bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-100 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700'
-            ]">
-                <div class="flex items-center gap-3">
-                    <Filter :size="20" stroke-width="2.5" />
-                    <span>{{ t('filters') }}</span>
-                    <span v-if="hasActiveFilters"
-                        class="px-2 py-0.5 text-xs rounded-full bg-primary-600 text-white font-bold">
-                        {{ selectedCategories.length + selectedTags.length }}
-                    </span>
+    <!-- flex + gap (not space-y): the groups use negative margins for their drop highlight -->
+    <div class="flex flex-col gap-6">
+        <!-- Day navigation + progress -->
+        <section class="rounded-2xl border border-line bg-surface p-3 shadow-xs sm:p-4">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div class="flex items-center gap-1">
+                    <UiIconButton :icon="ChevronLeft" variant="soft" size="lg" :label="t('previous')"
+                        @click="goToPreviousDay" />
+                    <UiIconButton :icon="ChevronRight" variant="soft" size="lg" :label="t('next')" :disabled="isToday"
+                        @click="goToNextDay" />
                 </div>
-                <ChevronDown :size="20" :class="['transition-transform', isFilterExpanded ? 'rotate-180' : '']" />
-            </button>
 
-            <!-- Expanded Filter Panel -->
-            <Transition name="slide">
-                <div v-if="isFilterExpanded"
-                    class="bg-white dark:bg-neutral-800 rounded-3xl p-6 shadow-lg border border-neutral-100 dark:border-neutral-700 space-y-6">
+                <div class="min-w-0 flex-1">
+                    <h2 class="truncate font-display text-2xl leading-tight font-semibold tracking-wide text-ink uppercase">
+                        {{ dayTitle }}
+                    </h2>
+                    <p class="truncate text-xs font-medium text-ink-faint first-letter:uppercase">{{ longDate }}</p>
+                </div>
 
-                    <!-- Clear Filters Button -->
-                    <div v-if="hasActiveFilters" class="flex justify-end">
-                        <button @click="clearFilters"
-                            class="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors">
-                            <X :size="16" />
+                <div class="flex items-center gap-2">
+                    <UiButton v-if="!isToday" variant="soft" size="sm" :icon="CalendarCheck" @click="goToToday">
+                        {{ t('today') }}
+                    </UiButton>
+
+                    <button type="button" :aria-expanded="isFilterExpanded" :class="[
+                        'inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors',
+                        hasActiveFilters || isFilterExpanded
+                            ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:text-primary-300'
+                            : 'border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink',
+                    ]" @click="isFilterExpanded = !isFilterExpanded">
+                        <ListFilter :size="18" stroke-width="2.25" />
+                        <span class="hidden sm:inline">{{ t('filters') }}</span>
+                        <span v-if="hasActiveFilters"
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-600 px-1.5 text-xs font-semibold text-white tabular-nums">
+                            {{ activeFilterCount }}
+                        </span>
+                    </button>
+
+                    <UiSegmented v-model="view" :options="viewOptions" icon-only />
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div v-if="isFilterExpanded" class="mt-3 space-y-4 border-t border-line pt-4">
+                <div>
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                        <h3 class="text-xs font-semibold tracking-wider text-ink-faint uppercase">{{ t('categories') }}</h3>
+                        <button v-if="hasActiveFilters" type="button"
+                            class="inline-flex items-center gap-1 rounded-md text-xs font-semibold text-red-600 hover:underline dark:text-red-400"
+                            @click="clearFilters">
+                            <X :size="14" stroke-width="2.5" />
                             {{ t('clearFilters') }}
                         </button>
                     </div>
-
-                    <!-- Categories Filter -->
-                    <div class="space-y-3">
-                        <h4 class="text-xs font-black uppercase tracking-widest text-neutral-400">
-                            {{ t('categories') }}
-                        </h4>
-                        <div class="flex flex-wrap gap-2">
-                            <!-- Uncategorized option -->
-                            <button @click="toggleCategoryFilter('uncategorized')" :class="[
-                                'px-4 py-2 rounded-xl font-bold text-sm transition-all',
-                                selectedCategories.includes('uncategorized')
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-                            ]">
-                                {{ t('uncategorized') }}
-                            </button>
-                            <button v-for="category in categories" :key="category.id"
-                                @click="toggleCategoryFilter(category.id)" :class="[
-                                    'px-4 py-2 rounded-xl font-bold text-sm transition-all',
-                                    selectedCategories.includes(category.id)
-                                        ? 'bg-primary-600 text-white'
-                                        : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-                                ]">
-                                {{ category.name }}
-                            </button>
-                        </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="category in categories" :key="category.id" type="button"
+                            :aria-pressed="selectedCategories.includes(category.id)"
+                            :class="filterChipClass(selectedCategories.includes(category.id))"
+                            @click="toggleIn(selectedCategories, category.id)">
+                            {{ category.name }}
+                        </button>
+                        <button type="button" :aria-pressed="selectedCategories.includes('uncategorized')"
+                            :class="filterChipClass(selectedCategories.includes('uncategorized'))"
+                            @click="toggleIn(selectedCategories, 'uncategorized')">
+                            {{ t('uncategorized') }}
+                        </button>
                     </div>
+                </div>
 
-                    <!-- Tags Filter -->
-                    <div class="space-y-3">
-                        <h4 class="text-xs font-black uppercase tracking-widest text-neutral-400">
-                            {{ t('tags') }}
-                        </h4>
-                        <div class="flex flex-wrap gap-2">
-                            <button v-for="tag in tags" :key="tag.id" @click="toggleTagFilter(tag.id)" :class="[
-                                'px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2',
+                <div>
+                    <h3 class="mb-2 text-xs font-semibold tracking-wider text-ink-faint uppercase">{{ t('tags') }}</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="tag in tags" :key="tag.id" type="button" :style="{ '--tag': tag.color }"
+                            :aria-pressed="selectedTags.includes(tag.id)" :class="[
+                                'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium text-(--tag) transition-colors',
                                 selectedTags.includes(tag.id)
-                                    ? 'ring-2 ring-offset-2 ring-primary-500'
-                                    : 'hover:opacity-80'
-                            ]" :style="{
-                                backgroundColor: tag.color + '20',
-                                color: tag.color
-                            }">
-                                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: tag.color }"></span>
-                                {{ tag.name }}
-                            </button>
-                            <p v-if="tags.length === 0" class="text-sm text-neutral-400 dark:text-neutral-500">
-                                {{ t('noTags') }}
-                            </p>
-                        </div>
+                                    ? 'border-(--tag) bg-(--tag)/15'
+                                    : 'border-line bg-surface hover:border-(--tag)/60',
+                            ]" @click="toggleIn(selectedTags, tag.id)">
+                            <span class="size-2 rounded-full bg-(--tag)"></span>
+                            {{ tag.name }}
+                        </button>
+                        <p v-if="tags.length === 0" class="text-sm text-ink-faint">{{ t('noTags') }}</p>
                     </div>
                 </div>
-            </Transition>
-        </div>
+            </div>
 
-        <!-- Loading State -->
-        <div v-if="isLoadingHabits" class="flex items-center justify-center py-20">
-            <RefreshCw :size="40" class="animate-spin text-primary-500" />
-        </div>
-
-        <!-- Habit Groups -->
-        <template v-else>
-            <div v-for="group in groupedHabits" :key="group.id" class="space-y-4 category-group"
-                :class="{ 'opacity-50': draggedCategoryId === group.id, 'ring-2 ring-primary-500 ring-offset-2 rounded-2xl': dragOverCategoryId === group.id && draggedCategoryId !== group.id }"
-                @dragover="handleDragOver($event, group.id)" @dragenter="handleDragEnter($event, group.id)"
-                @dragleave="handleDragLeave" @drop="handleDrop($event, group.id)">
-                <!-- Group Header -->
-                <div class="flex items-center gap-3 px-2 cursor-grab active:cursor-grabbing" draggable="true"
-                    @dragstart="handleDragStart($event, group.id)" @dragend="handleDragEnd">
-                    <GripVertical :size="20"
-                        class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 shrink-0" />
-                    <div class="w-2 h-6 bg-primary-500 rounded-full shrink-0"></div>
-                    <h3 class="text-xl font-black text-neutral-900 dark:text-white uppercase tracking-tight shrink-0">
-                        {{ group.name }}
-                    </h3>
-                    <div class="flex-1 h-px bg-linear-to-r from-neutral-300 dark:from-neutral-600 to-transparent"></div>
-                    <span class="text-sm font-medium text-neutral-400 dark:text-neutral-500 shrink-0">
-                        {{ group.habits.length }} {{ group.habits.length === 1 ? (t('habit')) : (t('habits')) }}
-                    </span>
+            <!-- Progress -->
+            <div v-if="filteredHabits.length > 0" class="mt-3 flex items-center gap-3 border-t border-line pt-3">
+                <div class="h-2 flex-1 overflow-hidden rounded-full bg-sunken" role="progressbar" :aria-valuenow="progress"
+                    aria-valuemin="0" aria-valuemax="100" :aria-label="t('dailyProgress')">
+                    <div :class="[
+                        'h-full rounded-full transition-all duration-500',
+                        progress === 100 ? 'bg-emerald-500' : 'bg-primary-500',
+                    ]" :style="{ width: `${progress}%` }"></div>
                 </div>
+                <span class="shrink-0 text-xs font-semibold text-ink-soft tabular-nums">
+                    {{ t('progressToday', { done: doneCount, total: filteredHabits.length }) }}
+                </span>
+            </div>
+        </section>
 
-                <!-- Card View -->
-                <div v-if="isCardView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-for="habit in group.habits" :key="habit.id"
-                        class="bg-white dark:bg-neutral-800 rounded-4xl p-6 shadow-lg border border-neutral-100 dark:border-neutral-700 hover:shadow-xl transition-all">
-                        <!-- Habit Header -->
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="p-3 rounded-2xl" :style="{ backgroundColor: habit.color + '20' }">
-                                <component :is="getIcon(habit.icon)" :size="24" :style="{ color: habit.color }"
-                                    stroke-width="2.5" />
-                            </div>
-                            <div class="flex-1">
-                                <h4 class="font-black text-neutral-900 dark:text-white text-lg">{{ habit.name }}</h4>
-                                <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
-                                    <span v-for="tag in habit.tags" :key="tag.id"
-                                        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
-                                        :style="{ backgroundColor: tag.color + '20', color: tag.color }">
-                                        {{ tag.name }}
-                                    </span>
+        <!-- Loading (first load only, so logging doesn't flash the grid) -->
+        <UiSpinner v-if="isLoadingHabits && habits.length === 0" />
+
+        <template v-else>
+            <!-- Habit groups -->
+            <section v-for="(group, index) in groupedHabits" :key="group.id" :class="[
+                '-m-2 space-y-3 rounded-2xl p-2 transition',
+                draggedId === group.id && 'opacity-40',
+                dragOverId === group.id && draggedId !== group.id && 'bg-primary-500/5 ring-2 ring-primary-500',
+                isLoadingHabits && 'opacity-60',
+            ]" @dragover="onDragOver($event, group.id)" @drop="onDrop($event, group.id)">
+                <CategoryHeader :name="group.name" :count="group.habits.length" :can-move-up="index > 0"
+                    :can-move-down="index < groupedHabits.length - 1" @dragstart="onDragStart($event, group.id)"
+                    @dragend="onDragEnd" @move-up="moveGroup(group.id, groupedHabits[index - 1].id)"
+                    @move-down="moveGroup(group.id, groupedHabits[index + 1].id)" />
+
+                <!-- Card view -->
+                <div v-if="view === 'card'" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <article v-for="habit in group.habits" :key="habit.id" :style="{ '--habit': habit.color }"
+                        class="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 shadow-xs transition hover:border-line-strong hover:shadow-md">
+                        <div class="flex items-start gap-3">
+                            <HabitIcon :icon="habit.icon" :color="habit.color" />
+                            <div class="min-w-0 flex-1">
+                                <h4 class="truncate leading-snug font-semibold text-ink" :title="habit.name">{{ habit.name }}</h4>
+                                <div v-if="habit.tags?.length" class="mt-1 flex flex-wrap gap-1">
+                                    <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
                                 </div>
                             </div>
-                            <div v-if="habit.is_saving">
-                                <RefreshCw :size="20" class="animate-spin text-primary-500" />
-                            </div>
+                            <LoaderCircle v-if="habit.is_saving" :size="18" class="shrink-0 animate-spin text-primary-500" />
+                            <CircleCheck v-else-if="habit.today_value > 0" :size="18" stroke-width="2.25"
+                                class="shrink-0 text-emerald-500" />
                         </div>
 
-                        <!-- Boolean Habit -->
-                        <div v-if="habit.habit_type === 'boolean'" class="flex justify-center">
-                            <button @click="toggleBoolean(habit)" :class="[
-                                'w-full py-4 rounded-2xl font-black text-lg transition-all active:scale-95',
-                                habit.is_completed_today
-                                    ? 'bg-green-500 text-white'
-                                    : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
-                            ]">
-                                <CheckCircle2 v-if="habit.is_completed_today" :size="24" class="mx-auto" />
-                                <span v-else>{{ t('markComplete') }}</span>
-                            </button>
+                        <div class="mt-auto">
+                            <HabitControl :habit="habit" @update="updateHabitValue(habit, $event)" />
                         </div>
-
-                        <!-- Counter Habit -->
-                        <div v-else-if="habit.habit_type === 'counter'" class="flex items-center justify-center gap-4">
-                            <button @click="decrementCounter(habit)"
-                                class="p-4 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                                <Minus :size="20" class="text-neutral-600 dark:text-neutral-300" />
-                            </button>
-                            <span class="text-4xl font-black" :style="{ color: habit.color }">
-                                {{ habit.today_value || 0 }}
-                            </span>
-                            <button @click="incrementCounter(habit)"
-                                class="p-4 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                                <Plus :size="20" class="text-neutral-600 dark:text-neutral-300" />
-                            </button>
-                            <span v-if="habit.unit" class="text-lg font-bold" :style="{ color: habit.color }">{{
-                                habit.unit }}</span>
-                        </div>
-
-                        <!-- Value Habit -->
-                        <div v-else-if="habit.habit_type === 'value'" class="flex items-center gap-3">
-                            <input :value="habit.today_value || ''" @change="updateValue(habit, $event.target.value)"
-                                type="number" step="1" placeholder="0"
-                                class="flex-1 bg-neutral-50 dark:bg-neutral-700 border-2 border-neutral-100 dark:border-neutral-600 hover:border-neutral-300 dark:hover:border-neutral-500 rounded-2xl py-3 text-center text-2xl font-black outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white"
-                                :style="{ color: habit.color }" />
-                            <span v-if="habit.unit" class="text-lg font-bold" :style="{ color: habit.color }">{{
-                                habit.unit }}</span>
-                        </div>
-
-                        <!-- Rating Habit -->
-                        <div v-else-if="habit.habit_type === 'rating'" class="flex justify-center gap-1">
-                            <button v-for="star in (habit.max_value || 5)" :key="star" @click="setRating(habit, star)"
-                                class="p-1 transition-transform hover:scale-110 active:scale-95">
-                                <Star :size="28" :fill="star <= (habit.today_value || 0) ? habit.color : 'transparent'"
-                                    :style="{ color: habit.color }" stroke-width="2" />
-                            </button>
-                        </div>
-                    </div>
+                    </article>
                 </div>
 
-                <!-- Row View -->
-                <div v-else class="space-y-3">
-                    <div v-for="habit in group.habits" :key="habit.id"
-                        class="bg-white dark:bg-neutral-800 rounded-2xl p-4 shadow-md border border-neutral-100 dark:border-neutral-700 flex items-center gap-4">
-                        <!-- Icon -->
-                        <div class="p-2 rounded-xl" :style="{ backgroundColor: habit.color + '20' }">
-                            <component :is="getIcon(habit.icon)" :size="20" :style="{ color: habit.color }"
-                                stroke-width="2.5" />
-                        </div>
-
-                        <!-- Name and Tags -->
-                        <div class="flex-1 flex items-center gap-3">
-                            <h4 class="font-bold text-neutral-900 dark:text-white">{{ habit.name }}</h4>
-                            <div v-if="habit.tags && habit.tags.length > 0" class="flex flex-wrap gap-1">
-                                <span v-for="tag in habit.tags" :key="tag.id"
-                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
-                                    :style="{ backgroundColor: tag.color + '20', color: tag.color }">
-                                    {{ tag.name }}
-                                </span>
+                <!-- List view -->
+                <div v-else class="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-xs">
+                    <div v-for="habit in group.habits" :key="habit.id" :style="{ '--habit': habit.color }"
+                        class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
+                        <div class="flex min-w-40 flex-1 items-center gap-3">
+                            <HabitIcon :icon="habit.icon" :color="habit.color" size="sm" />
+                            <div class="min-w-0 flex-1">
+                                <h4 class="truncate text-sm font-semibold text-ink" :title="habit.name">{{ habit.name }}</h4>
+                                <div v-if="habit.tags?.length" class="mt-0.5 flex flex-wrap gap-1">
+                                    <TagChip v-for="tag in habit.tags" :key="tag.id" :tag="tag" />
+                                </div>
                             </div>
                         </div>
-
-                        <!-- Compact Controls -->
-                        <div class="flex items-center gap-3">
-                            <!-- Loading -->
-                            <RefreshCw v-if="habit.is_saving" :size="16" class="animate-spin text-primary-500" />
-
-                            <!-- Boolean -->
-                            <button v-if="habit.habit_type === 'boolean'" @click="toggleBoolean(habit)" :class="[
-                                'px-4 py-2 rounded-xl font-bold transition-all active:scale-95',
-                                habit.is_completed_today
-                                    ? 'bg-green-500 text-white'
-                                    : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
-                            ]">
-                                <CheckCircle2 v-if="habit.is_completed_today" :size="20" />
-                                <span v-else>{{ t('done') }}</span>
-                            </button>
-
-                            <!-- Counter -->
-                            <template v-else-if="habit.habit_type === 'counter'">
-                                <button @click="decrementCounter(habit)"
-                                    class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                                    <Minus :size="18" />
-                                </button>
-                                <span class="text-xl font-black min-w-12 text-center" :style="{ color: habit.color }">
-                                    {{ habit.today_value || 0 }}
-                                </span>
-                                <button @click="incrementCounter(habit)"
-                                    class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-all active:scale-95">
-                                    <Plus :size="18" />
-                                </button>
-                                <span v-if="habit.unit" class="text-sm font-bold" :style="{ color: habit.color }">{{
-                                    habit.unit }}</span>
-                            </template>
-
-                            <!-- Value -->
-                            <template v-else-if="habit.habit_type === 'value'">
-                                <input :value="habit.today_value || ''"
-                                    @change="updateValue(habit, $event.target.value)" type="number" step="1"
-                                    placeholder="0"
-                                    class="w-28 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 hover:border-neutral-300 dark:hover:border-neutral-500 rounded-xl px-3 py-2 text-center font-bold outline-none focus:border-primary-500 transition text-neutral-900 dark:text-white" />
-                                <span v-if="habit.unit" class="text-sm font-bold" :style="{ color: habit.color }">{{
-                                    habit.unit }}</span>
-                            </template>
-
-                            <!-- Rating -->
-                            <div v-else-if="habit.habit_type === 'rating'" class="flex gap-0.5">
-                                <button v-for="star in (habit.max_value || 5)" :key="star"
-                                    @click="setRating(habit, star)" class="p-0.5 transition-transform hover:scale-110">
-                                    <Star :size="20"
-                                        :fill="star <= (habit.today_value || 0) ? habit.color : 'transparent'"
-                                        :style="{ color: habit.color }" stroke-width="2" />
-                                </button>
-                            </div>
-                        </div>
+                        <LoaderCircle v-if="habit.is_saving" :size="16" class="shrink-0 animate-spin text-primary-500" />
+                        <HabitControl :habit="habit" compact @update="updateHabitValue(habit, $event)" />
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Empty State -->
-            <div v-if="groupedHabits.length === 0"
-                class="bg-white dark:bg-neutral-800 rounded-4xl p-16 shadow-lg border border-neutral-100 dark:border-neutral-700 text-center">
-                <template v-if="hasActiveFilters">
-                    <div class="text-6xl mb-4">🔍</div>
-                    <h3 class="text-2xl font-black text-neutral-900 dark:text-white mb-2">
-                        {{ t('noMatchingHabits') }}
-                    </h3>
-                    <p class="text-neutral-500 dark:text-neutral-400 mb-4">
-                        {{ t('noHabitsMatchFilters') }}
-                    </p>
-                    <button @click="clearFilters"
-                        class="px-6 py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-400 transition-all">
-                        {{ t('clearFilters') }}
-                    </button>
-                </template>
-                <template v-else>
-                    <div class="text-6xl mb-4">🎯</div>
-                    <h3 class="text-2xl font-black text-neutral-900 dark:text-white mb-2">{{ t('noHabitsYet') }}
-                    </h3>
-                    <p class="text-neutral-500 dark:text-neutral-400 mb-6">{{ t('createFirstHabit') }}</p>
-                    <button @click="emit('open-template-modal')"
-                        class="inline-flex items-center gap-3 px-8 py-4 bg-primary-600 text-white rounded-2xl font-bold hover:bg-primary-700 transition-all shadow-lg active:scale-95">
-                        <Sparkles :size="20" stroke-width="2.5" />
-                        {{ t('addFromTemplates') }}
-                    </button>
-                </template>
-            </div>
+            <!-- Empty states -->
+            <UiEmptyState v-if="groupedHabits.length === 0 && hasActiveFilters" :icon="SearchX"
+                :title="t('noMatchingHabits')" :description="t('noHabitsMatchFilters')">
+                <UiButton variant="secondary" :icon="X" @click="clearFilters">{{ t('clearFilters') }}</UiButton>
+            </UiEmptyState>
+
+            <UiEmptyState v-else-if="groupedHabits.length === 0" :icon="Target" :title="t('noHabitsYet')"
+                :description="t('createFirstHabit')">
+                <UiButton :icon="Sparkles" @click="emit('open-template-modal')">{{ t('addFromTemplates') }}</UiButton>
+                <UiButton variant="secondary" :icon="PenLine" @click="emit('open-habit-form')">
+                    {{ t('createCustom') }}
+                </UiButton>
+            </UiEmptyState>
         </template>
     </div>
 </template>
-
-<style scoped>
-.category-group {
-    transition: all 0.2s ease;
-    user-select: none;
-}
-
-.category-group[draggable="true"] {
-    touch-action: none;
-}
-
-/* Filter panel slide transition */
-.slide-enter-active,
-.slide-leave-active {
-    transition: all 0.3s ease;
-    overflow: hidden;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-    opacity: 0;
-    transform: translateY(-10px);
-}
-</style>

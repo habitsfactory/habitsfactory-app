@@ -1,40 +1,29 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
-import { useDarkMode } from '@/composables/useDarkMode'
 import { useLanguage } from '@/composables/useLanguage'
-import { Download, ArrowLeft, Moon, Sun } from 'lucide-vue-next'
-import SiteFooter from '@/components/SiteFooter.vue'
+import { toISODate, addDays, recentYears } from '@/utils/dates'
+import { Download, CalendarRange, FileSpreadsheet } from 'lucide-vue-next'
+import PageShell from '@/components/layout/PageShell.vue'
+import UiSection from '@/components/ui/UiSection.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiAlert from '@/components/ui/UiAlert.vue'
+import { labelClass } from '@/components/ui/styles'
 
-const router = useRouter()
-const { isDark, toggleDarkMode } = useDarkMode()
 const { t } = useLanguage()
 
 // Export state
 const exportStartDate = ref('')
 const exportEndDate = ref('')
 const isExporting = ref(false)
+const exportError = ref('')
 
-// Computed property for dynamic years
-const quickSelectYears = computed(() => {
-    const currentYear = new Date().getFullYear()
-    return [
-        currentYear,
-        currentYear - 1,
-        currentYear - 2
-    ]
-})
+const quickSelectYears = recentYears()
 
-// Initialize date range
-const initializeDateRange = () => {
-    const today = new Date()
-    const thirtyDaysAgo = new Date(today)
-    thirtyDaysAgo.setDate(today.getDate() - 30)
-
-    exportEndDate.value = today.toISOString().split('T')[0]
-    exportStartDate.value = thirtyDaysAgo.toISOString().split('T')[0]
-}
+const isRangeValid = computed(() =>
+    !!exportStartDate.value && !!exportEndDate.value && exportStartDate.value <= exportEndDate.value
+)
 
 // Set export date range for a specific year
 const setExportYearRange = (year) => {
@@ -53,14 +42,16 @@ const setAllExportDataRange = async () => {
     } catch (err) {
         // Fallback: set to a wide range
         exportStartDate.value = '2020-01-01'
-        exportEndDate.value = new Date().toISOString().split('T')[0]
+        exportEndDate.value = toISODate()
     }
 }
 
 // Export data to CSV
 const exportToCSV = async () => {
-    if (!exportStartDate.value || !exportEndDate.value) {
-        alert('Please select a valid date range')
+    exportError.value = ''
+
+    if (!isRangeValid.value) {
+        exportError.value = t('invalidDateRange')
         return
     }
 
@@ -74,115 +65,75 @@ const exportToCSV = async () => {
             }
         })
 
-        // Create CSV content
-        const csvContent = response.data.csv_content
-
         // Create a blob and download
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-        const link = document.createElement('a')
+        const blob = new Blob([response.data.csv_content], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
 
-        link.setAttribute('href', url)
-        link.setAttribute('download', `habit_data_${exportStartDate.value}_to_${exportEndDate.value}.csv`)
-        link.style.visibility = 'hidden'
+        link.href = url
+        link.download = `habit_data_${exportStartDate.value}_to_${exportEndDate.value}.csv`
 
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
+        URL.revokeObjectURL(url)
     } catch (err) {
-        alert('Failed to export data. Please try again.')
+        exportError.value = t('exportFailed')
     } finally {
         isExporting.value = false
     }
 }
 
-const goBack = () => {
-    router.push('/dashboard')
-}
+const quickChipClass =
+    'inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-sm font-medium text-ink-soft transition-colors hover:border-primary-500 hover:text-primary-700 dark:hover:text-primary-300'
 
 onMounted(() => {
-    initializeDateRange()
+    // Default: the last 30 days
+    exportEndDate.value = toISODate()
+    exportStartDate.value = toISODate(addDays(new Date(), -30))
 })
 </script>
 
 <template>
-    <div
-        class="min-h-screen bg-neutral-50 dark:bg-neutral-900 p-6 md:p-12 font-sans text-neutral-900 dark:text-neutral-100 transition-colors duration-300">
-        <div class="max-w-4xl mx-auto">
-            <!-- Header -->
-            <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-                <div>
-                    <button @click="goBack"
-                        class="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors mb-4 font-bold">
-                        <ArrowLeft :size="20" stroke-width="2.5" />
-                        {{ t('returnDashboard') }}
-                    </button>
-                    <h1 class="text-4xl font-black tracking-tighter text-neutral-900 dark:text-white uppercase italic">
-                        Export Data
-                    </h1>
-                    <p class="text-neutral-400 dark:text-neutral-500 font-medium">Export your habit data to CSV</p>
-                </div>
-            </header>
-
-            <!-- Main Content -->
-            <div class="space-y-6">
-                <!-- Date Range Selector -->
-                <div
-                    class="bg-white dark:bg-neutral-800 rounded-4xl p-8 shadow-lg border border-neutral-100 dark:border-neutral-700">
-                    <h2 class="text-2xl font-black text-neutral-900 dark:text-white mb-6">Date Range</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div>
-                            <label class="block text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-2">Start
-                                Date</label>
-                            <input v-model="exportStartDate" type="date"
-                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-2">End
-                                Date</label>
-                            <input v-model="exportEndDate" type="date"
-                                class="w-full px-4 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                        </div>
-                    </div>
-
-                    <!-- Quick Select Buttons -->
-                    <div class="pt-4 border-t border-neutral-100 dark:border-neutral-700">
-                        <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300 mb-3">Quick Select</p>
-                        <div class="flex flex-wrap gap-2">
-                            <button @click="setAllExportDataRange"
-                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-primary-500 hover:text-white dark:hover:bg-primary-600 rounded-full text-sm font-bold transition-colors">
-                                All Data
-                            </button>
-                            <button v-for="year in quickSelectYears" :key="year" @click="setExportYearRange(year)"
-                                class="px-4 py-2 bg-neutral-100 dark:bg-neutral-700 hover:bg-primary-500 hover:text-white dark:hover:bg-primary-600 rounded-full text-sm font-bold transition-colors">
-                                {{ year }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Export Button -->
-                <div class="bg-linear-to-r from-primary-600 to-neutral-900 rounded-4xl p-8 shadow-lg">
-                    <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div>
-                            <h3 class="text-xl font-black text-white mb-1">Ready to Export?</h3>
-                            <p class="text-primary-100 font-medium">Download your habit data as a CSV file</p>
-                        </div>
-                        <button @click="exportToCSV" :disabled="isExporting"
-                            class="flex items-center gap-2 px-8 py-4 bg-white text-primary-600 rounded-2xl font-black hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                            <Download :size="20" />
-                            {{ isExporting ? 'Exporting...' : 'Export CSV' }}
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Footer -->
-                <SiteFooter />
+    <PageShell :title="t('exportTitle')" :description="t('exportSubtitle')">
+        <UiSection :title="t('dateRange')" :icon="CalendarRange">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <UiInput v-model="exportStartDate" type="date" :label="t('startDate')"
+                    :max="exportEndDate || undefined" />
+                <UiInput v-model="exportEndDate" type="date" :label="t('endDate')"
+                    :min="exportStartDate || undefined" />
             </div>
-        </div>
-    </div>
-</template>
 
-<style scoped>
-/* Add any component-specific styles here */
-</style>
+            <div class="mt-5 border-t border-line pt-4">
+                <span :class="labelClass">{{ t('quickSelect') }}</span>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" :class="quickChipClass" @click="setAllExportDataRange">
+                        {{ t('allData') }}
+                    </button>
+                    <button v-for="year in quickSelectYears" :key="year" type="button" :class="quickChipClass"
+                        @click="setExportYearRange(year)">
+                        {{ year }}
+                    </button>
+                </div>
+            </div>
+        </UiSection>
+
+        <UiAlert v-if="exportError">{{ exportError }}</UiAlert>
+
+        <section
+            class="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary-600 to-primary-950 p-5 text-white shadow-md sm:p-6">
+            <FileSpreadsheet :size="150" stroke-width="1.5"
+                class="pointer-events-none absolute -right-4 -bottom-8 text-white/10" />
+            <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="font-display text-2xl font-bold tracking-wide uppercase">{{ t('readyToExport') }}</h2>
+                    <p class="mt-1 max-w-md text-sm text-primary-100">{{ t('exportDescription') }}</p>
+                </div>
+                <UiButton variant="inverse" size="lg" :icon="Download" :loading="isExporting" :disabled="!isRangeValid"
+                    @click="exportToCSV">
+                    {{ isExporting ? t('exporting') : t('exportCsv') }}
+                </UiButton>
+            </div>
+        </section>
+    </PageShell>
+</template>
